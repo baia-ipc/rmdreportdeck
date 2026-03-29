@@ -187,22 +187,9 @@
     title.className = "report-sidebar-title";
     title.textContent = titleText;
 
-    var note = document.createElement("p");
-    note.className = "report-sidebar-note";
-    note.textContent = "Rendered with knit2html and enhanced with collapsible sections.";
-
     brand.appendChild(kicker);
     brand.appendChild(title);
-    brand.appendChild(note);
     sidebar.appendChild(brand);
-
-    var metrics = document.createElement("div");
-    metrics.className = "report-sidebar-metrics";
-    metrics.appendChild(createMetricCard("Sections", String(topSections.length)));
-    metrics.appendChild(createMetricCard("Subsections", String(document.querySelectorAll("details.report-subsection").length)));
-    metrics.appendChild(createMetricCard("Figures", String(document.querySelectorAll("img, svg").length)));
-    metrics.appendChild(createMetricCard("Tables", String(document.querySelectorAll("table").length)));
-    sidebar.appendChild(metrics);
 
     var navWrap = document.createElement("div");
     navWrap.className = "report-sidebar-nav-wrap";
@@ -255,51 +242,15 @@
     });
 
     sidebar.appendChild(navWrap);
+
+    var metrics = document.createElement("div");
+    metrics.className = "report-sidebar-metrics";
+    metrics.appendChild(createMetricCard("Sections", String(topSections.length)));
+    metrics.appendChild(createMetricCard("Subsections", String(document.querySelectorAll("details.report-subsection").length)));
+    metrics.appendChild(createMetricCard("Figures", String(document.querySelectorAll("img, svg").length)));
+    metrics.appendChild(createMetricCard("Tables", String(document.querySelectorAll("table").length)));
+    sidebar.appendChild(metrics);
     return sidebar;
-  }
-
-  function buildTopbar(titleText) {
-    var topbar = document.createElement("div");
-    topbar.className = "report-topbar";
-
-    var titleGroup = document.createElement("div");
-    titleGroup.className = "report-topbar-title";
-
-    var stepChip = document.createElement("span");
-    stepChip.className = "report-step-chip";
-    stepChip.textContent = getStepId(titleText);
-
-    var heading = document.createElement("div");
-    heading.className = "report-topbar-heading";
-
-    var strong = document.createElement("strong");
-    strong.textContent = getStepLabel(titleText);
-
-    var sub = document.createElement("span");
-    sub.textContent = "HTML report with embedded figures, downloadable assets, and collapsible sections";
-
-    heading.appendChild(strong);
-    heading.appendChild(sub);
-    titleGroup.appendChild(stepChip);
-    titleGroup.appendChild(heading);
-
-    var meta = document.createElement("div");
-    meta.className = "report-topbar-meta";
-
-    [
-      "Self-contained HTML",
-      document.querySelectorAll("details.report-section").length + " sections",
-      document.querySelectorAll(".report-asset-bar").length + " asset panels"
-    ].forEach(function (label) {
-      var chip = document.createElement("span");
-      chip.className = "report-meta-chip";
-      chip.textContent = label;
-      meta.appendChild(chip);
-    });
-
-    topbar.appendChild(titleGroup);
-    topbar.appendChild(meta);
-    return topbar;
   }
 
   function enhanceHeader(titleText) {
@@ -316,12 +267,18 @@
     var meta = document.createElement("div");
     meta.className = "report-hero-meta";
 
+    var stepChip = document.createElement("span");
+    stepChip.className = "report-step-chip";
+    stepChip.textContent = getStepId(titleText);
+    meta.appendChild(stepChip);
+
     [
-      getStepId(titleText),
+      "Self-contained HTML",
       document.querySelectorAll("details.report-section").length + " top-level sections",
       document.querySelectorAll(".report-asset-bar a").length + " embedded downloads"
     ].forEach(function (label) {
       var chip = document.createElement("span");
+      chip.className = "report-meta-chip";
       chip.textContent = label;
       meta.appendChild(chip);
     });
@@ -456,14 +413,11 @@
     var mainColumn = document.createElement("div");
     mainColumn.className = "report-main-column";
 
-    var topbar = buildTopbar(titleText);
-
     document.body.insertBefore(shell, mainContainer);
     shell.appendChild(sidebar);
     shell.appendChild(resizer);
     shell.appendChild(mainColumn);
     mainColumn.appendChild(mainContainer);
-    mainContainer.insertBefore(topbar, mainContainer.firstChild);
 
     document.body.classList.add("report-shell-ready");
     enhanceHeader(titleText);

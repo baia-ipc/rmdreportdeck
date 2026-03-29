@@ -46,7 +46,7 @@ of standard R Markdown content:
 
 - level-1 sections become collapsible top-level report sections
 - level-2 sections become nested collapsible subsections
-- a section named `# Goal` opens by default when present
+- a section named `# Goal`, `# Description`, `# Methods`, `# Workflow`, or `# Pipeline` opens by default when present
 - a fixed left sidebar is generated from the section hierarchy
 - a styled top bar and section cards make the report easier to scan
 - downloadable figure/data controls can be embedded directly in the page
@@ -79,8 +79,9 @@ layer and helper functions around it.
 Conventions:
 - use `#` headings for major sections
 - use `##` headings for subsections
-- add a `# Goal` section near the top when the purpose of the report should be
-  opened immediately
+- add a `# Goal`, `# Description`, `# Methods`, `# Workflow`, or `# Pipeline`
+  section near the top when the purpose or structure of the report should open
+  immediately
 - render figures and tables inline in standard chunks
 - for important HTML figures/tables, add a `report_asset_bar()` so users can
   download the figure and the source data directly from the page

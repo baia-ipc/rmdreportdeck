@@ -166,12 +166,6 @@ body.report-sidebar-resizing .report-sidebar-resizer::after {
   color: #162a3d;
 }
 
-.report-sidebar-note {
-  margin: 0;
-  font-size: 1.38rem;
-  color: #5e7287;
-}
-
 .report-sidebar-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -299,30 +293,6 @@ body.report-shell-ready .main-container > details.report-section {
   width: 100%;
 }
 
-.report-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  padding: 1rem 1.15rem;
-  border: 1px solid rgba(255, 255, 255, 0.68);
-  border-radius: 18px;
-  backdrop-filter: blur(18px);
-  background: rgba(248, 251, 255, 0.86);
-  box-shadow: var(--report-shadow-soft);
-}
-
-.report-topbar-title {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  min-width: 0;
-}
-
 .report-step-chip,
 .report-meta-chip {
   display: inline-flex;
@@ -340,31 +310,6 @@ body.report-shell-ready .main-container > details.report-section {
   background: linear-gradient(135deg, var(--report-accent), var(--report-accent-strong));
   color: #ffffff;
   box-shadow: 0 10px 24px rgba(47, 111, 221, 0.22);
-}
-
-.report-topbar-heading {
-  min-width: 0;
-}
-
-.report-topbar-heading strong {
-  display: block;
-  color: var(--report-heading);
-  font-size: 1rem;
-  line-height: 1.2;
-}
-
-.report-topbar-heading span {
-  display: block;
-  margin-top: 0.1rem;
-  color: var(--report-text-muted);
-  font-size: 0.9rem;
-}
-
-.report-topbar-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.45rem;
 }
 
 .report-meta-chip {
@@ -400,6 +345,7 @@ body.report-shell-ready .main-container > details.report-section {
 .report-hero-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.55rem;
   margin-top: 0.95rem;
 }
@@ -737,16 +683,6 @@ blockquote {
 @media (max-width: 780px) {
   .report-shell {
     gap: 1rem;
-  }
-
-  .report-topbar {
-    position: static;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .report-topbar-meta {
-    justify-content: flex-start;
   }
 
   #header {

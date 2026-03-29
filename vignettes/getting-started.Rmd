@@ -27,7 +27,8 @@ Write a standard `.Rmd` file and keep the structure simple:
 - use the YAML header normally
 - use `#` headings for major sections
 - use `##` headings for subsections
-- include a `# Goal` section when you want the first opened section to state the purpose of the report
+- include a `# Goal`, `# Description`, `# Methods`, `# Workflow`, or `# Pipeline`
+  section when you want that section to open by default
 - keep the analytical content in ordinary chunks; `rmdreportdeck` styles the output shell rather than changing normal R Markdown semantics
 
 For HTML reports, the shell behavior is:

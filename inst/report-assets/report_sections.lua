@@ -1,5 +1,12 @@
-local has_goal_section = false
+local has_named_default_section = false
 local opened_first_section = false
+local default_open_identifiers = {
+  goal = true,
+  description = true,
+  methods = true,
+  workflow = true,
+  pipeline = true
+}
 
 local function has_class(el, class_name)
   for _, class in ipairs(el.classes) do
@@ -26,12 +33,16 @@ local function clone_classes(classes)
   return copied
 end
 
+local function is_named_default_section(header)
+  return default_open_identifiers[header.identifier] == true
+end
+
 local function should_open_section(header)
-  if has_class(header, "open-by-default") or header.identifier == "goal" then
+  if has_class(header, "open-by-default") or is_named_default_section(header) then
     return true
   end
 
-  if not has_goal_section and not opened_first_section then
+  if not has_named_default_section and not opened_first_section then
     opened_first_section = true
     return true
   end
@@ -143,12 +154,12 @@ local function wrap_section(header, blocks)
 end
 
 function Pandoc(doc)
-  has_goal_section = false
+  has_named_default_section = false
   opened_first_section = false
 
   for _, block in ipairs(doc.blocks) do
-    if block.t == "Header" and block.level == 1 and block.identifier == "goal" then
-      has_goal_section = true
+    if block.t == "Header" and block.level == 1 and is_named_default_section(block) then
+      has_named_default_section = true
       break
     end
   end
