@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use rmdreportdeck, please cite the vignette referenced in this file."
+title: "rmdreportdeck"
+type: software
+authors:
+  - family-names: "Gonnella"
+    given-names: "Giorgio"
+    orcid: "https://orcid.org/0000-0003-3900-5397"
+version: "0.1.0"
+date-released: "2026-03-29"
+license: "GPL-3.0-only"
+repository-code: "https://github.com/baia-ipc/rmdreportdeck"
+url: "https://github.com/baia-ipc/rmdreportdeck"
+abstract: "Reusable HTML and PDF renderers, shell assets, and embedded download helpers for R Markdown analysis reports."
+preferred-citation:
+  type: article
+  title: "Getting Started with rmdreportdeck"
+  authors:
+    - family-names: "Gonnella"
+      given-names: "Giorgio"
+      orcid: "https://orcid.org/0000-0003-3900-5397"
+  year: 2026
+  journal: "R package vignette"
+  url: "https://github.com/baia-ipc/rmdreportdeck/blob/main/vignettes/getting-started.Rmd"
