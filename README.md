@@ -1,29 +1,95 @@
 # rmdreportdeck
 
-Standalone R package project for reusable R Markdown report rendering.
+`rmdreportdeck` is an R package for rendering polished, reusable R Markdown
+reports with a consistent shell, a consistent provenance sidecar, and a
+consistent authoring model.
 
-## What it provides
+The project is meant for analytical workflows that already use `.Rmd` reports
+but want something stronger than plain `rmarkdown::render()`. Its main goal is
+to make reports feel like durable analysis assets rather than ad hoc notebooks:
+structured, navigable, downloadable, and easy to reuse across projects.
 
-- `render_html_report()` and `render_html_report_with_runinfo()`
-- `render_pdf_report()` and `render_pdf_report_with_runinfo()`
-- `knit2html` and `knit2pdf` thin CLI wrappers
-- reusable HTML shell assets for collapsible reports
-- helper functions for embedded figure and data downloads inside HTML reports
+In practice, `rmdreportdeck` provides two closely related report targets:
 
-## How to structure a report
+- an HTML path with an interactive report shell
+- a PDF path with the same rendering contract and the same `.runinfo`
+  provenance sidecar, but without the HTML-only interactive features
 
-Use a normal R Markdown document with standard YAML and then follow these
-conventions:
+The HTML renderer is the feature-rich target. It turns a normal R Markdown
+document into a report with collapsible sections, sidebar navigation, a fixed
+layout, embedded figure/data download controls, and a presentation style that
+is suitable for analysis reports shared with collaborators. The PDF renderer is
+the static counterpart for cases where a plain document output is still needed.
 
-- the report title should describe the step or report clearly
-- level-1 headers (`#`) define the major report sections
-- level-2 headers (`##`) define nested subsections inside each major section
+The package is intentionally generic. It is not tied to a specific scientific
+domain, pipeline layout, dataset, or project repository. It packages only the
+reusable rendering logic, the reusable shell assets, the reusable helper
+functions, and thin CLI wrappers.
+
+## Core functionality
+
+`rmdreportdeck` provides:
+
+- HTML rendering through `render_html_report()` and
+  `render_html_report_with_runinfo()`
+- PDF rendering through `render_pdf_report()` and
+  `render_pdf_report_with_runinfo()`
+- a shared `.runinfo` sidecar for both HTML and PDF outputs
+- packaged HTML shell assets for collapsible sections and report navigation
+- helper functions for embedding downloadable figures and source data inside
+  HTML reports
+- thin POSIX CLI wrappers `knit2html` and `knit2pdf`
+
+## What the HTML shell adds
+
+For HTML reports, the packaged shell adds a consistent report interface on top
+of standard R Markdown content:
+
+- level-1 sections become collapsible top-level report sections
+- level-2 sections become nested collapsible subsections
 - a section named `# Goal` opens by default when present
-- figures and tables should be rendered inline in normal chunks
-- for HTML reports, add a `report_asset_bar()` above important figures/tables so
-  users can download the figure and the source data directly from the page
+- a fixed left sidebar is generated from the section hierarchy
+- a styled top bar and section cards make the report easier to scan
+- downloadable figure/data controls can be embedded directly in the page
 
-## Example HTML report pattern
+This means authors can keep writing ordinary `.Rmd` content while still getting
+a much more structured report output.
+
+## Installation
+
+Install from GitHub with `remotes` or `renv`:
+
+```r
+remotes::install_github("baia-ipc/rmdreportdeck")
+```
+
+or:
+
+```r
+renv::install("baia-ipc/rmdreportdeck")
+```
+
+For stronger reproducibility, install a tagged release or a specific commit.
+
+## Authoring model
+
+Write a normal R Markdown report and keep the structure simple.
+
+Recommended conventions:
+
+- use the YAML header normally
+- use `#` headings for major sections
+- use `##` headings for subsections
+- add a `# Goal` section near the top when the purpose of the report should be
+  opened immediately
+- render figures and tables inline in standard chunks
+- for important HTML figures/tables, add a `report_asset_bar()` so users can
+  download the figure and the source data directly from the page
+
+The package does not replace standard R Markdown authoring. It adds a rendering
+layer and helper functions around it.
+
+## Minimal HTML example
 
 ```r
 library(ggplot2)
@@ -40,8 +106,31 @@ report_asset_bar(
 )
 ```
 
+## Rendering
+
+From R:
+
+```r
+render_html_report_with_runinfo("report.Rmd")
+render_pdf_report_with_runinfo("report.Rmd")
+```
+
+From the CLI wrappers:
+
+```bash
+knit2html report.Rmd param=value
+knit2pdf report.Rmd param=value
+```
+
+Both rendering paths create a `.runinfo` file next to the rendered report.
+
+## Documentation and examples
+
 See:
 
 - `vignettes/getting-started.Rmd`
 - `inst/examples/minimal_html_report.Rmd`
 - `inst/examples/minimal_pdf_report.Rmd`
+
+Those examples are generic and synthetic; no project data is bundled in the
+package.
