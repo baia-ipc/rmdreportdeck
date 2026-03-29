@@ -18,6 +18,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 - HTML rendering with a collapsible report shell
 - PDF rendering with the same `.runinfo` provenance sidecar
 - helper functions for embedding downloadable figure and data assets in HTML reports
+- loop-aware item panels for repeated outputs created inside `for` loops
 - thin POSIX CLI wrappers for `knit2html` and `knit2pdf`
 
 # Authoring model
@@ -30,6 +31,7 @@ Write a standard `.Rmd` file and keep the structure simple:
 - include a `# Goal`, `# Description`, `# Methods`, `# Workflow`, or `# Pipeline`
   section when you want that section to open by default
 - keep the analytical content in ordinary chunks; `rmdreportdeck` styles the output shell rather than changing normal R Markdown semantics
+- when a subsection contains many repeated outputs, keep one `##` heading and render the repeated items with `report_item_panel()` and `report_loop_section()`
 
 For HTML reports, the shell behavior is:
 
@@ -40,7 +42,7 @@ For HTML reports, the shell behavior is:
 
 # Minimal HTML pattern
 
-```{r eval=FALSE}
+````markdown
 ---
 title: "P01 | Example Report"
 output: html_document
@@ -76,7 +78,39 @@ print(plot_obj)
 ```{r}
 knitr::kable(df)
 ```
+````
+
+# Loop-generated outputs
+
+For repeated outputs such as one figure per sample or pathway, use one H2 subsection and build loop items inside a regular R chunk.
+
+````markdown
+## Per-sample QC
+
+```{r results='asis'}
+items <- vector("list", nrow(samples))
+
+for (i in seq_len(nrow(samples))) {
+  row <- samples[i, , drop = FALSE]
+  plot_obj <- ggplot(row, aes(sample, value, fill = sample)) + geom_col()
+
+  items[[i]] <- report_item_panel(
+    title = paste0("Sample ", row$sample),
+    asset_bar = report_asset_bar(
+      "Downloads",
+      report_download_link("PNG", paste0("sample-", row$sample, ".png"), report_plot_png_data_uri(plot_obj)),
+      report_download_link("PDF", paste0("sample-", row$sample, ".pdf"), report_plot_pdf_data_uri(plot_obj)),
+      report_download_link("TSV", paste0("sample-", row$sample, ".tsv"), report_text_data_uri(report_tsv_text(row)))
+    ),
+    note = "Synthetic example item.",
+    report_item_plot(plot_obj),
+    report_item_table(row)
+  )
+}
+
+report_loop_section(items)
 ```
+````
 
 # Rendering
 
@@ -101,4 +135,5 @@ Both renderers write a `.runinfo` sidecar next to the rendered report.
 The package also ships generic example reports:
 
 - `system.file("examples", "minimal_html_report.Rmd", package = "rmdreportdeck")`
+- `system.file("examples", "loop_html_report.Rmd", package = "rmdreportdeck")`
 - `system.file("examples", "minimal_pdf_report.Rmd", package = "rmdreportdeck")`

@@ -1,0 +1,58 @@
+---
+title: "P00 | Loop HTML Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(rmdreportdeck)
+
+samples <- data.frame(
+  sample = paste0("S", 1:4),
+  value = c(2, 5, 3, 6),
+  stringsAsFactors = FALSE
+)
+```
+
+# Description
+
+This example shows the loop-aware panel helpers for repeated outputs such as one figure per sample or pathway.
+
+## Per-sample panels
+
+```{r results='asis'}
+items <- vector("list", nrow(samples))
+
+for (i in seq_len(nrow(samples))) {
+  row <- samples[i, , drop = FALSE]
+  plot_obj <- ggplot(row, aes(sample, value, fill = sample)) +
+    geom_col(show.legend = FALSE)
+
+  items[[i]] <- report_item_panel(
+    title = paste0("Sample ", row$sample, ": synthetic profile"),
+    asset_bar = report_asset_bar(
+      "Downloads",
+      report_download_link(
+        "PNG",
+        paste0("sample-", row$sample, ".png"),
+        report_plot_png_data_uri(plot_obj, width = 5, height = 3.5)
+      ),
+      report_download_link(
+        "PDF",
+        paste0("sample-", row$sample, ".pdf"),
+        report_plot_pdf_data_uri(plot_obj, width = 5, height = 3.5)
+      ),
+      report_download_link(
+        "TSV",
+        paste0("sample-", row$sample, ".tsv"),
+        report_text_data_uri(report_tsv_text(row))
+      )
+    ),
+    note = "Each item is a nested collapsible panel produced inside a loop.",
+    report_item_plot(plot_obj, width = 5, height = 3.5),
+    report_item_table(row)
+  )
+}
+
+report_loop_section(items)
+```

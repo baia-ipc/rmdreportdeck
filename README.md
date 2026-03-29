@@ -37,6 +37,7 @@ the static counterpart for cases where a plain document output is still needed.
 - packaged HTML shell assets for collapsible sections and report navigation
 - helper functions for embedding downloadable figures and source data inside
   HTML reports
+- loop-aware helpers for repeated figures/tables produced inside `for` loops
 - POSIX CLI wrappers `knit2html` and `knit2pdf`
 
 ## What the HTML shell adds
@@ -85,6 +86,8 @@ Conventions:
 - render figures and tables inline in standard chunks
 - for important HTML figures/tables, add a `report_asset_bar()` so users can
   download the figure and the source data directly from the page
+- for repeated loop-generated outputs, keep one `##` subsection and render the
+  repeated items inside it with `report_item_panel()` and `report_loop_section()`
 
 ## Minimal example
 
@@ -101,6 +104,37 @@ report_asset_bar(
   report_download_link("PDF", "plot.pdf", report_plot_pdf_data_uri(plot_obj)),
   report_download_link("TSV", "plot.tsv", report_text_data_uri(report_tsv_text(df)))
 )
+```
+
+## Loop-generated outputs
+
+For repeated outputs such as one figure per sample, pathway, or gene:
+
+- keep one normal `##` subsection in the Rmd
+- build one `report_item_panel()` per iteration
+- finish the chunk with `report_loop_section(items)`
+
+```r
+items <- list()
+
+for (i in seq_len(nrow(df))) {
+  row <- df[i, , drop = FALSE]
+  plot_obj <- ggplot(row, aes(group, value, fill = group)) + geom_col()
+
+  items[[i]] <- report_item_panel(
+    title = paste("Sample", row$group),
+    asset_bar = report_asset_bar(
+      "Downloads",
+      report_download_link("PNG", paste0("sample-", row$group, ".png"), report_plot_png_data_uri(plot_obj)),
+      report_download_link("PDF", paste0("sample-", row$group, ".pdf"), report_plot_pdf_data_uri(plot_obj)),
+      report_download_link("TSV", paste0("sample-", row$group, ".tsv"), report_text_data_uri(report_tsv_text(row)))
+    ),
+    report_item_plot(plot_obj),
+    report_item_table(row)
+  )
+}
+
+report_loop_section(items)
 ```
 
 ## Rendering
@@ -127,6 +161,7 @@ See:
 
 - `vignettes/getting-started.Rmd`
 - `inst/examples/minimal_html_report.Rmd`
+- `inst/examples/loop_html_report.Rmd`
 - `inst/examples/minimal_pdf_report.Rmd`
 
 Those examples are generic and synthetic; no project data is bundled in the

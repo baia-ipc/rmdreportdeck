@@ -76,6 +76,68 @@ make_mock_pdf_rmd <- function(path) {
   )
 }
 
+make_mock_loop_rmd <- function(path, output_format = "html_document") {
+  writeLines(
+    c(
+      "---",
+      "title: \"P00 | Synthetic Loop Report\"",
+      paste0("output: ", output_format),
+      "---",
+      "",
+      "```{r setup, include=FALSE}",
+      "library(ggplot2)",
+      "library(rmdreportdeck)",
+      "samples <- data.frame(",
+      "  sample = paste0(\"S\", 1:5),",
+      "  value = c(2, 4, 3, 5, 6),",
+      "  stringsAsFactors = FALSE",
+      ")",
+      "```",
+      "",
+      "# Description",
+      "",
+      "Synthetic loop report body.",
+      "",
+      "## Per-sample panels",
+      "",
+      "```{r results='asis'}",
+      "items <- vector(\"list\", nrow(samples))",
+      "for (i in seq_len(nrow(samples))) {",
+      "  row <- samples[i, , drop = FALSE]",
+      "  plot_obj <- ggplot(row, aes(sample, value, fill = sample)) + geom_col(show.legend = FALSE)",
+      "  items[[i]] <- report_item_panel(",
+      "    title = paste0(\"Sample \", row$sample, \": alpha/beta\"),",
+      "    asset_bar = report_asset_bar(",
+      "      \"Downloads\",",
+      "      report_download_link(",
+      "        \"PNG\",",
+      "        paste0(\"sample-\", row$sample, \".png\"),",
+      "        report_plot_png_data_uri(plot_obj, width = 5, height = 3.5)",
+      "      ),",
+      "      report_download_link(",
+      "        \"PDF\",",
+      "        paste0(\"sample-\", row$sample, \".pdf\"),",
+      "        report_plot_pdf_data_uri(plot_obj, width = 5, height = 3.5)",
+      "      ),",
+      "      report_download_link(",
+      "        \"TSV\",",
+      "        paste0(\"sample-\", row$sample, \".tsv\"),",
+      "        report_text_data_uri(report_tsv_text(row))",
+      "      )",
+      "    ),",
+      "    note = \"Synthetic loop item\",",
+      "    report_item_plot(plot_obj, width = 5, height = 3.5),",
+      "    report_item_table(row)",
+      "  )",
+      "}",
+      "report_loop_section(items)",
+      "```"
+    ),
+    con = path,
+    useBytes = TRUE
+  )
+}
+
 skip_if_render_stack_missing <- function() {
   testthat::skip_if_not_installed("rmarkdown")
   testthat::skip_if_not(rmarkdown::pandoc_available(), "pandoc not available")
@@ -149,6 +211,44 @@ test_that("runinfo follows an explicit relative output path", {
 
   expect_identical(html_file, normalizePath(file.path(out_dir, "custom-report.html"), mustWork = FALSE))
   expect_true(file.exists(html_file))
+  expect_true(file.exists(runinfo_file))
+})
+
+test_that("loop section renderer creates collapsible item panels", {
+  skip_if_render_stack_missing()
+
+  tmp_dir <- tempfile("rmdreportdeck-loop-html-")
+  dir.create(tmp_dir, recursive = TRUE)
+  rmd_file <- file.path(tmp_dir, "loop_report.Rmd")
+  make_mock_loop_rmd(rmd_file, output_format = "html_document")
+
+  html_file <- render_html_report_with_runinfo(rmd_file)
+  html_text <- paste(readLines(html_file, warn = FALSE), collapse = "\n")
+
+  expect_match(html_text, "report-loop-section")
+  expect_match(html_text, "report-item-panel")
+  expect_match(html_text, "Sample S1: alpha/beta")
+  expect_match(html_text, "Sample S5: alpha/beta")
+  expect_match(html_text, "sample-s1-alpha-beta")
+  expect_match(html_text, "report-item-table-wrap")
+  expect_match(html_text, "report-item-plot-card")
+  expect_match(html_text, "sample-S1.tsv")
+  expect_match(html_text, "data-open-first=\"true\"")
+})
+
+test_that("loop section renderer degrades safely in PDF", {
+  skip_if_render_stack_missing()
+  testthat::skip_if_not(nzchar(Sys.which("pdflatex")), "pdflatex not available")
+
+  tmp_dir <- tempfile("rmdreportdeck-loop-pdf-")
+  dir.create(tmp_dir, recursive = TRUE)
+  rmd_file <- file.path(tmp_dir, "loop_report.Rmd")
+  make_mock_loop_rmd(rmd_file, output_format = "pdf_document")
+
+  pdf_file <- render_pdf_report_with_runinfo(rmd_file)
+  runinfo_file <- sub("\\.pdf$", ".runinfo", pdf_file)
+
+  expect_true(file.exists(pdf_file))
   expect_true(file.exists(runinfo_file))
 })
 

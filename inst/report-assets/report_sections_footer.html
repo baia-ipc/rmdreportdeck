@@ -139,6 +139,47 @@
     });
   }
 
+  function initLoopSections() {
+    toArray(document.querySelectorAll(".report-loop-section")).forEach(function (section) {
+      var items = toArray(section.querySelectorAll(":scope > details.report-item-panel"));
+      if (!items.length) {
+        return;
+      }
+
+      var openFirst = section.dataset.openFirst !== "false";
+      var maxOpen = parseInt(section.dataset.maxOpen || "1", 10);
+      if (isNaN(maxOpen) || maxOpen < 1) {
+        maxOpen = 0;
+      }
+
+      if (openFirst && !items.some(function (item) { return item.open; })) {
+        items[0].open = true;
+      }
+
+      items.forEach(function (item) {
+        item.addEventListener("toggle", function () {
+          if (!item.open || maxOpen < 1) {
+            return;
+          }
+
+          var openItems = items.filter(function (candidate) {
+            return candidate.open;
+          });
+
+          if (openItems.length <= maxOpen) {
+            return;
+          }
+
+          openItems.forEach(function (candidate) {
+            if (candidate !== item) {
+              candidate.open = false;
+            }
+          });
+        });
+      });
+    });
+  }
+
   function getTitleText() {
     var title = document.querySelector("#header .title");
     return title ? title.textContent.trim() : "Analysis Report";
@@ -566,6 +607,7 @@
     addControls();
     ensureIds();
     decorateTables();
+    initLoopSections();
     buildShell();
     bindNavLinks();
     openHashTarget();
