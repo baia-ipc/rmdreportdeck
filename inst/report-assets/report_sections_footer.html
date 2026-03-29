@@ -1,0 +1,628 @@
+<script>
+(function () {
+  function toArray(value) {
+    return Array.prototype.slice.call(value || []);
+  }
+
+  function getSections() {
+    return toArray(document.querySelectorAll("details.report-section, details.report-subsection"));
+  }
+
+  function slugify(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/-{2,}/g, "-");
+  }
+
+  function addNestedSubsections() {
+    toArray(document.querySelectorAll("details.report-section > .report-section-body")).forEach(function (body) {
+      var hasExistingSubsections = toArray(body.children).some(function (node) {
+        return node.tagName === "DETAILS" && node.classList.contains("report-subsection");
+      });
+      if (hasExistingSubsections) {
+        return;
+      }
+
+      var nodes = toArray(body.childNodes);
+      var fragment = document.createDocumentFragment();
+      var currentHeading = null;
+      var currentNodes = [];
+
+      function flushSubsection() {
+        if (!currentHeading) {
+          return;
+        }
+
+        var details = document.createElement("details");
+        details.className = "report-subsection";
+        details.id = currentHeading.id || slugify(currentHeading.textContent) || "";
+
+        var summary = document.createElement("summary");
+        var title = document.createElement("span");
+        title.className = "report-subsection-title";
+        title.textContent = currentHeading.textContent;
+        summary.appendChild(title);
+        details.appendChild(summary);
+
+        var inner = document.createElement("div");
+        inner.className = "report-subsection-body";
+        currentNodes.forEach(function (node) {
+          inner.appendChild(node);
+        });
+        details.appendChild(inner);
+        fragment.appendChild(details);
+
+        currentHeading = null;
+        currentNodes = [];
+      }
+
+      nodes.forEach(function (node) {
+        if (node.nodeType === 1 && node.tagName === "H2") {
+          flushSubsection();
+          currentHeading = node;
+        } else if (currentHeading) {
+          currentNodes.push(node);
+        } else {
+          fragment.appendChild(node);
+        }
+      });
+
+      flushSubsection();
+
+      if (fragment.childNodes.length > 0) {
+        while (body.firstChild) {
+          body.removeChild(body.firstChild);
+        }
+        body.appendChild(fragment);
+      }
+    });
+  }
+
+  function addControls() {
+    var header = document.getElementById("header");
+    if (!header || document.querySelector(".report-section-controls")) {
+      return;
+    }
+
+    var controls = document.createElement("div");
+    controls.className = "report-section-controls";
+
+    var expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "btn btn-default btn-xs";
+    expand.textContent = "Expand All";
+    expand.addEventListener("click", function () {
+      getSections().forEach(function (section) {
+        section.open = true;
+      });
+    });
+
+    var collapse = document.createElement("button");
+    collapse.type = "button";
+    collapse.className = "btn btn-default btn-xs";
+    collapse.textContent = "Collapse All";
+    collapse.addEventListener("click", function () {
+      getSections().forEach(function (section) {
+        section.open = false;
+      });
+    });
+
+    controls.appendChild(expand);
+    controls.appendChild(collapse);
+    header.insertAdjacentElement("afterend", controls);
+  }
+
+  function ensureIds() {
+    getSections().forEach(function (section, index) {
+      if (!section.id) {
+        var title = "";
+        var titleNode = section.querySelector(":scope > summary .report-section-title, :scope > summary .report-subsection-title");
+        if (titleNode) {
+          title = titleNode.textContent;
+        }
+        section.id = slugify(title) || "section-" + (index + 1);
+      }
+    });
+  }
+
+  function decorateTables() {
+    toArray(document.querySelectorAll(".report-section-body table, .report-subsection-body table")).forEach(function (table) {
+      if (table.parentElement && table.parentElement.classList.contains("report-inline-table-wrap")) {
+        return;
+      }
+      var wrap = document.createElement("div");
+      wrap.className = "report-inline-table-wrap";
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    });
+  }
+
+  function getTitleText() {
+    var title = document.querySelector("#header .title");
+    return title ? title.textContent.trim() : "Analysis Report";
+  }
+
+  function getStepId(titleText) {
+    var parts = titleText.split("|");
+    return parts.length > 1 ? parts[0].trim() : "Report";
+  }
+
+  function getStepLabel(titleText) {
+    var parts = titleText.split("|");
+    return parts.length > 1 ? parts.slice(1).join("|").trim() : titleText;
+  }
+
+  function createMetricCard(label, value) {
+    var card = document.createElement("div");
+    card.className = "report-metric-card";
+
+    var labelNode = document.createElement("span");
+    labelNode.className = "report-metric-label";
+    labelNode.textContent = label;
+
+    var valueNode = document.createElement("span");
+    valueNode.className = "report-metric-value";
+    valueNode.textContent = value;
+
+    card.appendChild(labelNode);
+    card.appendChild(valueNode);
+    return card;
+  }
+
+  function buildSidebar(titleText) {
+    var topSections = toArray(document.querySelectorAll("details.report-section"));
+    var sidebar = document.createElement("aside");
+    sidebar.className = "report-sidebar";
+
+    var brand = document.createElement("div");
+    brand.className = "report-sidebar-brand";
+
+    var kicker = document.createElement("span");
+    kicker.className = "report-sidebar-kicker";
+    kicker.textContent = "Interactive Report";
+
+    var title = document.createElement("h1");
+    title.className = "report-sidebar-title";
+    title.textContent = titleText;
+
+    var note = document.createElement("p");
+    note.className = "report-sidebar-note";
+    note.textContent = "Rendered with knit2html and enhanced with collapsible sections.";
+
+    brand.appendChild(kicker);
+    brand.appendChild(title);
+    brand.appendChild(note);
+    sidebar.appendChild(brand);
+
+    var metrics = document.createElement("div");
+    metrics.className = "report-sidebar-metrics";
+    metrics.appendChild(createMetricCard("Sections", String(topSections.length)));
+    metrics.appendChild(createMetricCard("Subsections", String(document.querySelectorAll("details.report-subsection").length)));
+    metrics.appendChild(createMetricCard("Figures", String(document.querySelectorAll("img, svg").length)));
+    metrics.appendChild(createMetricCard("Tables", String(document.querySelectorAll("table").length)));
+    sidebar.appendChild(metrics);
+
+    var navWrap = document.createElement("div");
+    navWrap.className = "report-sidebar-nav-wrap";
+
+    var navTitle = document.createElement("p");
+    navTitle.className = "report-nav-title";
+    navTitle.textContent = "Sections";
+    navWrap.appendChild(navTitle);
+
+    var navList = document.createElement("nav");
+    navList.className = "report-nav-list";
+    navWrap.appendChild(navList);
+
+    topSections.forEach(function (section, sectionIndex) {
+      var sectionTitle = section.querySelector(":scope > summary .report-section-title");
+      var link = document.createElement("a");
+      link.className = "report-nav-link level1";
+      link.href = "#" + section.id;
+      link.dataset.targetId = section.id;
+
+      var index = document.createElement("span");
+      index.className = "report-nav-index";
+      index.textContent = String(sectionIndex + 1);
+
+      var text = document.createElement("span");
+      text.textContent = sectionTitle ? sectionTitle.textContent : section.id;
+
+      link.appendChild(index);
+      link.appendChild(text);
+      navList.appendChild(link);
+
+      toArray(section.querySelectorAll(":scope > .report-section-body > details.report-subsection")).forEach(function (subsection, subIndex) {
+        var subsectionTitle = subsection.querySelector(":scope > summary .report-subsection-title");
+        var subLink = document.createElement("a");
+        subLink.className = "report-nav-link level2";
+        subLink.href = "#" + subsection.id;
+        subLink.dataset.targetId = subsection.id;
+
+        var subIndexNode = document.createElement("span");
+        subIndexNode.className = "report-nav-index";
+        subIndexNode.textContent = String(sectionIndex + 1) + "." + String(subIndex + 1);
+
+        var subText = document.createElement("span");
+        subText.textContent = subsectionTitle ? subsectionTitle.textContent : subsection.id;
+
+        subLink.appendChild(subIndexNode);
+        subLink.appendChild(subText);
+        navList.appendChild(subLink);
+      });
+    });
+
+    sidebar.appendChild(navWrap);
+    return sidebar;
+  }
+
+  function buildTopbar(titleText) {
+    var topbar = document.createElement("div");
+    topbar.className = "report-topbar";
+
+    var titleGroup = document.createElement("div");
+    titleGroup.className = "report-topbar-title";
+
+    var stepChip = document.createElement("span");
+    stepChip.className = "report-step-chip";
+    stepChip.textContent = getStepId(titleText);
+
+    var heading = document.createElement("div");
+    heading.className = "report-topbar-heading";
+
+    var strong = document.createElement("strong");
+    strong.textContent = getStepLabel(titleText);
+
+    var sub = document.createElement("span");
+    sub.textContent = "HTML report with embedded figures, downloadable assets, and collapsible sections";
+
+    heading.appendChild(strong);
+    heading.appendChild(sub);
+    titleGroup.appendChild(stepChip);
+    titleGroup.appendChild(heading);
+
+    var meta = document.createElement("div");
+    meta.className = "report-topbar-meta";
+
+    [
+      "Self-contained HTML",
+      document.querySelectorAll("details.report-section").length + " sections",
+      document.querySelectorAll(".report-asset-bar").length + " asset panels"
+    ].forEach(function (label) {
+      var chip = document.createElement("span");
+      chip.className = "report-meta-chip";
+      chip.textContent = label;
+      meta.appendChild(chip);
+    });
+
+    topbar.appendChild(titleGroup);
+    topbar.appendChild(meta);
+    return topbar;
+  }
+
+  function enhanceHeader(titleText) {
+    var header = document.getElementById("header");
+    if (!header || header.querySelector(".report-hero-kicker")) {
+      return;
+    }
+
+    var kicker = document.createElement("span");
+    kicker.className = "report-hero-kicker";
+    kicker.textContent = "Report Overview";
+    header.insertBefore(kicker, header.firstChild);
+
+    var meta = document.createElement("div");
+    meta.className = "report-hero-meta";
+
+    [
+      getStepId(titleText),
+      document.querySelectorAll("details.report-section").length + " top-level sections",
+      document.querySelectorAll(".report-asset-bar a").length + " embedded downloads"
+    ].forEach(function (label) {
+      var chip = document.createElement("span");
+      chip.textContent = label;
+      meta.appendChild(chip);
+    });
+
+    header.appendChild(meta);
+  }
+
+  function sidebarWidthStorageKey() {
+    return "report-sidebar-width";
+  }
+
+  function getSidebarBounds() {
+    var style = window.getComputedStyle(document.documentElement);
+    var minWidth = parseFloat(style.getPropertyValue("--report-sidebar-min-width")) || 220;
+    var maxWidth = parseFloat(style.getPropertyValue("--report-sidebar-max-width")) || 560;
+    return {
+      min: minWidth,
+      max: Math.max(minWidth, Math.min(maxWidth, window.innerWidth - 320))
+    };
+  }
+
+  function setSidebarWidth(widthPx) {
+    var bounds = getSidebarBounds();
+    var clamped = Math.max(bounds.min, Math.min(bounds.max, widthPx));
+    document.documentElement.style.setProperty("--report-sidebar-width", clamped + "px");
+    try {
+      window.localStorage.setItem(sidebarWidthStorageKey(), String(Math.round(clamped)));
+    } catch (error) {
+      return;
+    }
+  }
+
+  function restoreSidebarWidth() {
+    try {
+      var stored = window.localStorage.getItem(sidebarWidthStorageKey());
+      if (!stored) {
+        return;
+      }
+      var numeric = parseFloat(stored);
+      if (!isNaN(numeric)) {
+        setSidebarWidth(numeric);
+      }
+    } catch (error) {
+      return;
+    }
+  }
+
+  function initSidebarResizer(resizer) {
+    if (!resizer || window.innerWidth <= 1220) {
+      return;
+    }
+
+    var startX = 0;
+    var startWidth = 0;
+    var dragging = false;
+
+    function onPointerMove(event) {
+      if (!dragging) {
+        return;
+      }
+      var delta = event.clientX - startX;
+      setSidebarWidth(startWidth + delta);
+    }
+
+    function onPointerUp() {
+      if (!dragging) {
+        return;
+      }
+      dragging = false;
+      document.body.classList.remove("report-sidebar-resizing");
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    }
+
+    resizer.addEventListener("pointerdown", function (event) {
+      if (window.innerWidth <= 1220) {
+        return;
+      }
+      event.preventDefault();
+      dragging = true;
+      startX = event.clientX;
+      startWidth = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue("--report-sidebar-width")) || 260;
+      document.body.classList.add("report-sidebar-resizing");
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    });
+
+    resizer.addEventListener("keydown", function (event) {
+      var currentWidth = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue("--report-sidebar-width")) || 260;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setSidebarWidth(currentWidth - 20);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setSidebarWidth(currentWidth + 20);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        setSidebarWidth(getSidebarBounds().min);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        setSidebarWidth(getSidebarBounds().max);
+      }
+    });
+
+    window.addEventListener("resize", function () {
+      var currentWidth = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue("--report-sidebar-width")) || 260;
+      setSidebarWidth(currentWidth);
+    });
+  }
+
+  function buildShell() {
+    if (document.body.classList.contains("report-shell-ready")) {
+      return;
+    }
+
+    var mainContainer = document.querySelector(".main-container");
+    if (!mainContainer) {
+      return;
+    }
+
+    var titleText = getTitleText();
+    var shell = document.createElement("div");
+    shell.className = "report-shell";
+
+    var sidebar = buildSidebar(titleText);
+    var resizer = document.createElement("div");
+    resizer.className = "report-sidebar-resizer";
+    resizer.tabIndex = 0;
+    resizer.setAttribute("role", "separator");
+    resizer.setAttribute("aria-orientation", "vertical");
+    resizer.setAttribute("aria-label", "Resize sidebar");
+    var mainColumn = document.createElement("div");
+    mainColumn.className = "report-main-column";
+
+    var topbar = buildTopbar(titleText);
+
+    document.body.insertBefore(shell, mainContainer);
+    shell.appendChild(sidebar);
+    shell.appendChild(resizer);
+    shell.appendChild(mainColumn);
+    mainColumn.appendChild(mainContainer);
+    mainContainer.insertBefore(topbar, mainContainer.firstChild);
+
+    document.body.classList.add("report-shell-ready");
+    enhanceHeader(titleText);
+    restoreSidebarWidth();
+    initSidebarResizer(resizer);
+  }
+
+  function setActiveNav(targetId) {
+    toArray(document.querySelectorAll(".report-nav-link")).forEach(function (link) {
+      link.classList.toggle("active", link.dataset.targetId === targetId);
+    });
+  }
+
+  function closeSection(target) {
+    if (!target || !target.matches || !target.matches("details.report-section, details.report-subsection")) {
+      return;
+    }
+
+    toArray(target.querySelectorAll("details.report-subsection")).forEach(function (subsection) {
+      subsection.open = false;
+    });
+    target.open = false;
+  }
+
+  function openSectionChain(node) {
+    var section = node && node.matches && node.matches("details.report-section, details.report-subsection")
+      ? node
+      : node && node.closest
+        ? node.closest("details.report-section, details.report-subsection")
+        : null;
+
+    while (section) {
+      section.open = true;
+      section = section.parentElement ? section.parentElement.closest("details.report-section, details.report-subsection") : null;
+    }
+  }
+
+  function openHashTarget() {
+    if (!window.location.hash) {
+      return;
+    }
+
+    var id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) {
+      return;
+    }
+
+    var target = document.getElementById(id);
+    if (!target) {
+      return;
+    }
+
+    openSectionChain(target);
+    setActiveNav(id);
+
+    if (typeof target.scrollIntoView === "function") {
+      window.requestAnimationFrame(function () {
+        target.scrollIntoView({ block: "start" });
+      });
+    }
+  }
+
+  function bindNavLinks() {
+    toArray(document.querySelectorAll(".report-nav-link")).forEach(function (link) {
+      link.addEventListener("click", function (event) {
+        event.preventDefault();
+
+        var id = link.dataset.targetId;
+        var target = id ? document.getElementById(id) : null;
+        if (!target) {
+          return;
+        }
+
+        var isToggleTarget = target.matches && target.matches("details.report-section, details.report-subsection");
+        if (isToggleTarget && target.open) {
+          closeSection(target);
+          setActiveNav("");
+          if (window.location.hash === "#" + id && window.history && typeof window.history.replaceState === "function") {
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          }
+          return;
+        }
+
+        openSectionChain(target);
+        setActiveNav(id);
+        if (window.history && typeof window.history.replaceState === "function") {
+          window.history.replaceState(null, "", "#" + id);
+        }
+        if (typeof target.scrollIntoView === "function") {
+          window.requestAnimationFrame(function () {
+            target.scrollIntoView({ block: "start" });
+          });
+        }
+      });
+    });
+  }
+
+  function initActiveTracking() {
+    var sections = getSections();
+    if (!sections.length) {
+      return;
+    }
+
+    if ("IntersectionObserver" in window) {
+      var observer = new IntersectionObserver(function (entries) {
+        var visible = entries
+          .filter(function (entry) {
+            return entry.isIntersecting;
+          })
+          .sort(function (a, b) {
+            return a.boundingClientRect.top - b.boundingClientRect.top;
+          });
+
+        if (visible.length) {
+          setActiveNav(visible[0].target.id);
+        }
+      }, {
+        rootMargin: "-18% 0px -68% 0px",
+        threshold: [0, 0.2, 0.6]
+      });
+
+      sections.forEach(function (section) {
+        observer.observe(section);
+      });
+      return;
+    }
+
+    function onScroll() {
+      var current = sections[0];
+      sections.forEach(function (section) {
+        if (section.getBoundingClientRect().top <= 140) {
+          current = section;
+        }
+      });
+      if (current) {
+        setActiveNav(current.id);
+      }
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+
+  function init() {
+    addNestedSubsections();
+    addControls();
+    ensureIds();
+    decorateTables();
+    buildShell();
+    bindNavLinks();
+    openHashTarget();
+    initActiveTracking();
+    window.addEventListener("hashchange", openHashTarget);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>

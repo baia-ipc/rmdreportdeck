@@ -1,0 +1,20 @@
+---
+title: "P00 | Minimal PDF Report"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+
+df <- data.frame(group = c("A", "B"), value = c(2, 5))
+```
+
+# Goal
+
+This is a minimal example PDF report for `rmdreportdeck`.
+
+## Figure
+
+```{r}
+ggplot(df, aes(group, value, fill = group)) + geom_col()
+```

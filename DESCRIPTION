@@ -1,0 +1,23 @@
+Package: rmdreportdeck
+Type: Package
+Title: Reusable Renderers and Shell Assets for R Markdown Reports
+Version: 0.1.0
+Authors@R: person(given = "Giorgio", family = "Placeholder", role = c("aut", "cre"), email = "giorgio@example.org")
+Description: Provides reusable HTML and PDF rendering helpers for R Markdown
+    reports, including an interactive HTML shell, embedded download helpers,
+    thin command-line entrypoints, and a shared provenance sidecar format.
+License: GPL-3
+Encoding: UTF-8
+LazyData: false
+Roxygen: false
+Imports:
+    base64enc,
+    htmltools,
+    rmarkdown
+Suggests:
+    ggplot2,
+    knitr,
+    testthat,
+    withr
+Config/testthat/edition: 3
+VignetteBuilder: knitr

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Knit a Rmd to HTML" > /dev/stderr
+  echo "Usage: knit2html <Rmdfile> [param1=value1] [param2=value2] ..." > /dev/stderr
+  exit 1
+elif [ ! -e "$1" ]; then
+  echo "File does not exist: $1" > /dev/stderr
+  exit 1
+fi
+
+REPORTDECK_COMMAND_PATH="${REPORTDECK_COMMAND_PATH:-$0}" \
+  Rscript -e 'rmdreportdeck::knit2html_cli(commandArgs(trailingOnly = TRUE))' "$@"

@@ -1,0 +1,35 @@
+---
+title: "P00 | Minimal HTML Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(knitr)
+library(rmdreportdeck)
+
+df <- data.frame(group = c("A", "B"), value = c(2, 5))
+plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
+```
+
+# Goal
+
+This is a minimal example HTML report for `rmdreportdeck`.
+
+## Figure
+
+```{r}
+print(report_asset_bar(
+  "Downloads",
+  report_download_link("PNG", "plot.png", report_plot_png_data_uri(plot_obj)),
+  report_download_link("PDF", "plot.pdf", report_plot_pdf_data_uri(plot_obj)),
+  report_download_link("TSV", "plot.tsv", report_text_data_uri(report_tsv_text(df)))
+))
+print(plot_obj)
+```
+
+## Table
+
+```{r}
+knitr::kable(df)
+```

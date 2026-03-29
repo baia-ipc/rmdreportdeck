@@ -1,0 +1,103 @@
+---
+title: "Getting Started with rmdreportdeck"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with rmdreportdeck}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Overview
+
+`rmdreportdeck` provides:
+
+- HTML rendering with a collapsible report shell
+- PDF rendering with the same `.runinfo` provenance sidecar
+- helper functions for embedding downloadable figure and data assets in HTML reports
+- thin POSIX CLI wrappers for `knit2html` and `knit2pdf`
+
+# Authoring model
+
+Write a standard `.Rmd` file and keep the structure simple:
+
+- use the YAML header normally
+- use `#` headings for major sections
+- use `##` headings for subsections
+- include a `# Goal` section when you want the first opened section to state the purpose of the report
+- keep the analytical content in ordinary chunks; `rmdreportdeck` styles the output shell rather than changing normal R Markdown semantics
+
+For HTML reports, the shell behavior is:
+
+- H1 sections become collapsible top-level panels
+- H2 sections become collapsible nested panels
+- the sidebar is generated from the section hierarchy
+- key figures and tables can include in-page download links
+
+# Minimal HTML pattern
+
+```{r eval=FALSE}
+---
+title: "P01 | Example Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(knitr)
+library(rmdreportdeck)
+
+df <- data.frame(group = c("A", "B"), value = c(2, 5))
+plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
+```
+
+# Goal
+
+Describe the purpose of the report here.
+
+## Figure
+
+```{r}
+print(report_asset_bar(
+  "Downloads",
+  report_download_link("PNG", "plot.png", report_plot_png_data_uri(plot_obj)),
+  report_download_link("PDF", "plot.pdf", report_plot_pdf_data_uri(plot_obj)),
+  report_download_link("TSV", "plot.tsv", report_text_data_uri(report_tsv_text(df)))
+))
+print(plot_obj)
+```
+
+## Table
+
+```{r}
+knitr::kable(df)
+```
+```
+
+# Rendering
+
+From R:
+
+```{r eval=FALSE}
+render_html_report_with_runinfo("report.Rmd")
+render_pdf_report_with_runinfo("report.Rmd")
+```
+
+From the CLI wrappers:
+
+```bash
+knit2html report.Rmd param=value
+knit2pdf report.Rmd param=value
+```
+
+Both renderers write a `.runinfo` sidecar next to the rendered report.
+
+# Examples
+
+The package also ships generic example reports:
+
+- `system.file("examples", "minimal_html_report.Rmd", package = "rmdreportdeck")`
+- `system.file("examples", "minimal_pdf_report.Rmd", package = "rmdreportdeck")`
