@@ -29,6 +29,33 @@ normalize_report_path <- function(path) {
   normalizePath(path, winslash = "/", mustWork = FALSE)
 }
 
+default_output_basename <- function(input, extension) {
+  input_name <- basename(input)
+  sub("\\.[^.]+$", extension, input_name)
+}
+
+ensure_extension <- function(path, extension) {
+  if (grepl(paste0("\\", extension, "$"), path, perl = TRUE)) {
+    return(path)
+  }
+  paste0(path, extension)
+}
+
+resolve_expected_output_path <- function(input, output_file = NULL, extension) {
+  input_path <- normalizePath(input, mustWork = TRUE)
+  input_dir <- dirname(input_path)
+
+  if (is.null(output_file) || !nzchar(output_file)) {
+    return(normalize_report_path(file.path(input_dir, default_output_basename(input_path, extension))))
+  }
+
+  if (grepl("^/", output_file)) {
+    return(normalize_report_path(ensure_extension(output_file, extension)))
+  }
+
+  normalize_report_path(file.path(input_dir, ensure_extension(output_file, extension)))
+}
+
 normalize_optional_path <- function(path) {
   if (is.null(path) || length(path) == 0 || is.na(path) || !nzchar(path)) {
     return("unavailable")
@@ -157,31 +184,35 @@ write_runinfo <- function(output_report, command = NULL, renderer = NULL, params
 }
 
 render_html_report_with_runinfo <- function(input, params = list(), output_file = NULL, command = NULL) {
+  expected_output <- resolve_expected_output_path(input, output_file, ".html")
   timing <- system.time({
     rendered <- render_html_report(input = input, params = params, output_file = output_file)
   })
+  final_output <- if (file.exists(expected_output)) expected_output else normalize_report_path(rendered)
   write_runinfo(
-    output_report = rendered,
+    output_report = final_output,
     command = command,
     renderer = "rmdreportdeck::render_html_report",
     params = params,
     timing = timing
   )
-  invisible(rendered)
+  invisible(final_output)
 }
 
 render_pdf_report_with_runinfo <- function(input, params = list(), output_file = NULL, command = NULL) {
+  expected_output <- resolve_expected_output_path(input, output_file, ".pdf")
   timing <- system.time({
     rendered <- render_pdf_report(input = input, params = params, output_file = output_file)
   })
+  final_output <- if (file.exists(expected_output)) expected_output else normalize_report_path(rendered)
   write_runinfo(
-    output_report = rendered,
+    output_report = final_output,
     command = command,
     renderer = "rmdreportdeck::render_pdf_report",
     params = params,
     timing = timing
   )
-  invisible(rendered)
+  invisible(final_output)
 }
 
 run_cli <- function(args, format) {

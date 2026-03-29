@@ -130,6 +130,28 @@ test_that("PDF renderer creates static PDF and runinfo", {
   expect_match(runinfo_text, "rmdreportdeck::render_pdf_report")
 })
 
+test_that("runinfo follows an explicit relative output path", {
+  skip_if_render_stack_missing()
+
+  tmp_dir <- tempfile("rmdreportdeck-relative-output-")
+  dir.create(tmp_dir, recursive = TRUE)
+  rmd_file <- file.path(tmp_dir, "report.Rmd")
+  out_dir <- file.path(tmp_dir, "nested")
+  dir.create(out_dir)
+  make_mock_rmd(rmd_file)
+
+  html_file <- render_html_report_with_runinfo(
+    rmd_file,
+    output_file = "nested/custom-report.html",
+    params = list(report_title = "Synthetic Title")
+  )
+  runinfo_file <- file.path(out_dir, "custom-report.runinfo")
+
+  expect_identical(html_file, normalizePath(file.path(out_dir, "custom-report.html"), mustWork = FALSE))
+  expect_true(file.exists(html_file))
+  expect_true(file.exists(runinfo_file))
+})
+
 test_that("CLI entrypoints accept key=value parameters", {
   skip_if_render_stack_missing()
   testthat::skip_if_not(nzchar(Sys.which("bash")), "bash not available")
