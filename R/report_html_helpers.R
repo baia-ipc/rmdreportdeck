@@ -185,6 +185,12 @@ render_reportdeck_item_content_markdown <- function(content) {
   if (is.null(lhs)) rhs else lhs
 }
 
+reportdeck_compact_html <- function(tag) {
+  rendered <- htmltools::renderTags(tag)$html
+  rendered <- gsub(">\\s+<", "><", rendered, perl = TRUE)
+  trimws(rendered)
+}
+
 report_item_plot <- function(plot_obj, width = 8, height = 6, res = 144, ...) {
   structure(
     list(
@@ -310,7 +316,7 @@ report_loop_section <- function(items, open_first = TRUE, max_open = 1L) {
       `data-max-open` = as.character(max_open),
       htmltools::tagList(rendered)
     )
-    return(knitr::asis_output(as.character(html)))
+    return(knitr::asis_output(reportdeck_compact_html(html)))
   }
 
   markdown <- paste(

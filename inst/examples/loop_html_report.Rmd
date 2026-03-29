@@ -20,7 +20,7 @@ This example shows the loop-aware panel helpers for repeated outputs such as one
 
 ## Per-sample panels
 
-```{r results='asis'}
+```{r results='asis', echo=FALSE}
 items <- vector("list", nrow(samples))
 
 for (i in seq_len(nrow(samples))) {

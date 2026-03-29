@@ -100,7 +100,7 @@ make_mock_loop_rmd <- function(path, output_format = "html_document") {
       "",
       "## Per-sample panels",
       "",
-      "```{r results='asis'}",
+      "```{r results='asis', echo=FALSE}",
       "items <- vector(\"list\", nrow(samples))",
       "for (i in seq_len(nrow(samples))) {",
       "  row <- samples[i, , drop = FALSE]",
@@ -234,6 +234,8 @@ test_that("loop section renderer creates collapsible item panels", {
   expect_match(html_text, "report-item-plot-card")
   expect_match(html_text, "sample-S1.tsv")
   expect_match(html_text, "data-open-first=\"true\"")
+  expect_false(grepl("&lt;div class=&quot;report-asset-bar&quot;", html_text, fixed = TRUE))
+  expect_false(grepl("items &lt;- vector", html_text, fixed = TRUE))
 })
 
 test_that("loop section renderer degrades safely in PDF", {
