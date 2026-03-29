@@ -1,30 +1,29 @@
 # rmdreportdeck
 
-`rmdreportdeck` is an R package for rendering polished, reusable R Markdown
-reports with a consistent shell, a consistent provenance sidecar, and a
-consistent authoring model.
+`rmdreportdeck` is an R package for rendering polished, reusable styled R Markdown
+reports with collapsible sections, embedded data/images with user download buttons,
+a provenance run log file.
 
-The project is meant for analytical workflows that already use `.Rmd` reports
-but want something stronger than plain `rmarkdown::render()`. Its main goal is
-to make reports feel like durable analysis assets rather than ad hoc notebooks:
+The project is meant for analytical workflows that already use `.Rmd` reports.
+Its main goal is to make reports feel like durable analysis assets rather than ad hoc notebooks:
 structured, navigable, downloadable, and easy to reuse across projects.
+
+The package is intentionally generic. It is not tied to a specific scientific
+domain, pipeline layout, dataset, or project repository.
+
+## Interactive HTML and Fixed PDF reports
 
 In practice, `rmdreportdeck` provides two closely related report targets:
 
 - an HTML path with an interactive report shell
 - a PDF path with the same rendering contract and the same `.runinfo`
-  provenance sidecar, but without the HTML-only interactive features
+  provenance logfile, but without the HTML-only interactive features
 
 The HTML renderer is the feature-rich target. It turns a normal R Markdown
 document into a report with collapsible sections, sidebar navigation, a fixed
 layout, embedded figure/data download controls, and a presentation style that
 is suitable for analysis reports shared with collaborators. The PDF renderer is
 the static counterpart for cases where a plain document output is still needed.
-
-The package is intentionally generic. It is not tied to a specific scientific
-domain, pipeline layout, dataset, or project repository. It packages only the
-reusable rendering logic, the reusable shell assets, the reusable helper
-functions, and thin CLI wrappers.
 
 ## Core functionality
 
@@ -34,11 +33,11 @@ functions, and thin CLI wrappers.
   `render_html_report_with_runinfo()`
 - PDF rendering through `render_pdf_report()` and
   `render_pdf_report_with_runinfo()`
-- a shared `.runinfo` sidecar for both HTML and PDF outputs
+- `.runinfo` logfile generation for both HTML and PDF outputs
 - packaged HTML shell assets for collapsible sections and report navigation
 - helper functions for embedding downloadable figures and source data inside
   HTML reports
-- thin POSIX CLI wrappers `knit2html` and `knit2pdf`
+- POSIX CLI wrappers `knit2html` and `knit2pdf`
 
 ## What the HTML shell adds
 
@@ -71,13 +70,13 @@ renv::install("baia-ipc/rmdreportdeck")
 
 For stronger reproducibility, install a tagged release or a specific commit.
 
-## Authoring model
+## Writing the Rmd
 
-Write a normal R Markdown report and keep the structure simple.
+Write a normal R Markdown report with a simple structure.
+The package does not replace standard R Markdown authoring. It adds a rendering
+layer and helper functions around it.
 
-Recommended conventions:
-
-- use the YAML header normally
+Conventions:
 - use `#` headings for major sections
 - use `##` headings for subsections
 - add a `# Goal` section near the top when the purpose of the report should be
@@ -86,10 +85,7 @@ Recommended conventions:
 - for important HTML figures/tables, add a `report_asset_bar()` so users can
   download the figure and the source data directly from the page
 
-The package does not replace standard R Markdown authoring. It adds a rendering
-layer and helper functions around it.
-
-## Minimal HTML example
+## Minimal example
 
 ```r
 library(ggplot2)
