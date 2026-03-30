@@ -14,6 +14,7 @@ make_mock_rmd <- function(path) {
       "library(rmdreportdeck)",
       "df <- data.frame(group = c(\"A\", \"B\"), value = c(2, 5))",
       "plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()",
+      "bundle <- report_plot_bundle(plot_obj, \"plot\", width = 6, height = 4, data = df)",
       "```",
       "",
       "# Description",
@@ -23,11 +24,10 @@ make_mock_rmd <- function(path) {
       "## Figure",
       "",
       "```{r}",
-      "print(report_asset_bar(",
+      "print(report_bundle_asset_bar(",
       "  \"Downloads\",",
-      "  report_download_link(\"PNG\", \"plot.png\", report_plot_png_data_uri(plot_obj)),",
-      "  report_download_link(\"PDF\", \"plot.pdf\", report_plot_pdf_data_uri(plot_obj)),",
-      "  report_download_link(\"TSV\", \"plot.tsv\", report_text_data_uri(report_tsv_text(df)))",
+      "  bundle,",
+      "  tsv_label = \"TSV\"",
       "))",
       "```",
       "",
@@ -92,6 +92,8 @@ make_mock_loop_rmd <- function(path, output_format = "html_document") {
       "  value = c(2, 4, 3, 5, 6),",
       "  stringsAsFactors = FALSE",
       ")",
+      "plots_dir <- file.path(tempdir(), \"plots\")",
+      "data_dir <- file.path(tempdir(), \"data\")",
       "```",
       "",
       "# Description",
@@ -105,25 +107,21 @@ make_mock_loop_rmd <- function(path, output_format = "html_document") {
       "for (i in seq_len(nrow(samples))) {",
       "  row <- samples[i, , drop = FALSE]",
       "  plot_obj <- ggplot(row, aes(sample, value, fill = sample)) + geom_col(show.legend = FALSE)",
+      "  bundle <- report_plot_bundle(",
+      "    plot_obj,",
+      "    stem = paste0(\"sample-\", row$sample),",
+      "    width = 5,",
+      "    height = 3.5,",
+      "    data = row,",
+      "    plot_dir = plots_dir,",
+      "    data_dir = data_dir",
+      "  )",
       "  items[[i]] <- report_item_panel(",
       "    title = paste0(\"Sample \", row$sample, \": alpha/beta\"),",
-      "    asset_bar = report_asset_bar(",
+      "    asset_bar = report_bundle_asset_bar(",
       "      \"Downloads\",",
-      "      report_download_link(",
-      "        \"PNG\",",
-      "        paste0(\"sample-\", row$sample, \".png\"),",
-      "        report_plot_png_data_uri(plot_obj, width = 5, height = 3.5)",
-      "      ),",
-      "      report_download_link(",
-      "        \"PDF\",",
-      "        paste0(\"sample-\", row$sample, \".pdf\"),",
-      "        report_plot_pdf_data_uri(plot_obj, width = 5, height = 3.5)",
-      "      ),",
-      "      report_download_link(",
-      "        \"TSV\",",
-      "        paste0(\"sample-\", row$sample, \".tsv\"),",
-      "        report_text_data_uri(report_tsv_text(row))",
-      "      )",
+      "      bundle,",
+      "      tsv_label = \"TSV\"",
       "    ),",
       "    note = \"Synthetic loop item\",",
       "    report_item_plot(plot_obj, width = 5, height = 3.5),",
@@ -147,6 +145,49 @@ test_that("report_asset_paths resolves packaged assets", {
   paths <- report_asset_paths()
 
   expect_true(all(file.exists(unlist(paths, use.names = FALSE))))
+})
+
+test_that("bundle helpers create download bundles and optional files", {
+  skip_if_not_installed("ggplot2")
+
+  tmp_dir <- tempfile("rmdreportdeck-bundle-")
+  dir.create(tmp_dir, recursive = TRUE)
+  plot_dir <- file.path(tmp_dir, "plots")
+  data_dir <- file.path(tmp_dir, "data")
+
+  df <- data.frame(group = c("A", "B"), value = c(2, 5))
+  plot_obj <- ggplot2::ggplot(df, ggplot2::aes(group, value, fill = group)) + ggplot2::geom_col()
+
+  bundle <- report_plot_bundle(
+    plot_obj,
+    stem = "synthetic-plot",
+    width = 6,
+    height = 4,
+    data = df,
+    plot_dir = plot_dir,
+    data_dir = data_dir,
+    save_svg = TRUE
+  )
+
+  expect_s3_class(bundle, "reportdeck_plot_bundle")
+  expect_true(file.exists(file.path(plot_dir, "synthetic-plot.pdf")))
+  expect_true(file.exists(file.path(plot_dir, "synthetic-plot.svg")))
+  expect_true(file.exists(file.path(data_dir, "synthetic-plot.tsv")))
+  expect_match(bundle$png_uri, "^data:image/png;base64,")
+  expect_match(bundle$pdf_uri, "^data:application/pdf;base64,")
+  expect_match(bundle$data_uri, "^data:text/tab-separated-values")
+
+  links <- report_bundle_download_links(bundle, tsv_label = "TSV")
+  expect_length(links, 3)
+
+  asset_bar_html <- as.character(report_bundle_asset_bar("Downloads", bundle, tsv_label = "TSV"))
+  expect_match(asset_bar_html, "synthetic-plot.png")
+  expect_match(asset_bar_html, "synthetic-plot.pdf")
+  expect_match(asset_bar_html, "synthetic-plot.tsv")
+
+  table_link_html <- as.character(report_tsv_download_link(df, "table.tsv", "Table TSV"))
+  expect_match(table_link_html, "table.tsv")
+  expect_match(table_link_html, "Table TSV")
 })
 
 test_that("HTML renderer creates interactive report and runinfo", {
@@ -233,6 +274,7 @@ test_that("loop section renderer creates collapsible item panels", {
   expect_match(html_text, "report-item-table-wrap")
   expect_match(html_text, "report-item-plot-card")
   expect_match(html_text, "sample-S1.tsv")
+  expect_match(html_text, "sample-S1.pdf")
   expect_match(html_text, "data-open-first=\"true\"")
   expect_false(grepl("&lt;div class=&quot;report-asset-bar&quot;", html_text, fixed = TRUE))
   expect_false(grepl("items &lt;- vector", html_text, fixed = TRUE))

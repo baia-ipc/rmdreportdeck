@@ -1,5 +1,50 @@
 # Helpers for self-contained downloadable assets and loop-aware panels inside reports.
 
+reportdeck_draw_plot <- function(plot_obj) {
+  if (inherits(plot_obj, "grob")) {
+    grid::grid.draw(plot_obj)
+  } else {
+    print(plot_obj)
+  }
+}
+
+reportdeck_write_plot_png <- function(plot_obj, path, width = 8, height = 6, res = 144) {
+  grDevices::png(
+    filename = path,
+    width = width,
+    height = height,
+    units = "in",
+    res = res,
+    bg = "white"
+  )
+  on.exit(grDevices::dev.off(), add = TRUE)
+  reportdeck_draw_plot(plot_obj)
+  invisible(path)
+}
+
+reportdeck_write_plot_pdf <- function(plot_obj, path, width = 8, height = 6) {
+  grDevices::pdf(
+    file = path,
+    width = width,
+    height = height,
+    onefile = TRUE
+  )
+  on.exit(grDevices::dev.off(), add = TRUE)
+  reportdeck_draw_plot(plot_obj)
+  invisible(path)
+}
+
+reportdeck_write_plot_svg <- function(plot_obj, path, width = 8, height = 6) {
+  grDevices::svg(
+    filename = path,
+    width = width,
+    height = height
+  )
+  on.exit(grDevices::dev.off(), add = TRUE)
+  reportdeck_draw_plot(plot_obj)
+  invisible(path)
+}
+
 report_tsv_text <- function(df) {
   con <- textConnection("out", "w", local = TRUE)
   on.exit(close(con), add = TRUE)
@@ -20,31 +65,15 @@ report_text_data_uri <- function(text, mime = "text/tab-separated-values;charset
 
 report_plot_png_data_uri <- function(plot_obj, width = 8, height = 6, res = 144) {
   png_file <- tempfile(fileext = ".png")
-  grDevices::png(
-    filename = png_file,
-    width = width,
-    height = height,
-    units = "in",
-    res = res,
-    bg = "white"
-  )
   on.exit(unlink(png_file), add = TRUE)
-  if (inherits(plot_obj, "grob")) grid::grid.draw(plot_obj) else print(plot_obj)
-  grDevices::dev.off()
+  reportdeck_write_plot_png(plot_obj, png_file, width = width, height = height, res = res)
   base64enc::dataURI(file = png_file, mime = "image/png")
 }
 
 report_plot_pdf_data_uri <- function(plot_obj, width = 8, height = 6) {
   pdf_file <- tempfile(fileext = ".pdf")
-  grDevices::pdf(
-    file = pdf_file,
-    width = width,
-    height = height,
-    onefile = TRUE
-  )
   on.exit(unlink(pdf_file), add = TRUE)
-  if (inherits(plot_obj, "grob")) grid::grid.draw(plot_obj) else print(plot_obj)
-  grDevices::dev.off()
+  reportdeck_write_plot_pdf(plot_obj, pdf_file, width = width, height = height)
   base64enc::dataURI(file = pdf_file, mime = "application/pdf")
 }
 
@@ -54,6 +83,14 @@ report_download_link <- function(label, filename, href) {
     href = href,
     download = filename,
     class = "btn btn-default btn-xs"
+  )
+}
+
+report_tsv_download_link <- function(df, filename, label = "Download TSV") {
+  report_download_link(
+    label = label,
+    filename = filename,
+    href = report_text_data_uri(report_tsv_text(df))
   )
 }
 
@@ -67,6 +104,142 @@ report_asset_bar <- function(asset_label, ..., note = NULL) {
     children <- c(children, list(htmltools::tags$span(note, class = "report-asset-note")))
   }
   do.call(htmltools::tags$div, c(list(class = "report-asset-bar"), children))
+}
+
+report_plot_bundle <- function(
+  plot_obj,
+  stem,
+  width = 8,
+  height = 6,
+  data = NULL,
+  plot_dir = NULL,
+  data_dir = NULL,
+  res = 144,
+  save_pdf = TRUE,
+  save_svg = FALSE
+) {
+  if (!is.character(stem) || length(stem) != 1L || !nzchar(stem)) {
+    stop("'stem' must be a single non-empty character string.", call. = FALSE)
+  }
+
+  if (!is.null(plot_dir)) {
+    dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+  if (!is.null(data_dir) && !is.null(data)) {
+    dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  file_names <- list(
+    png = paste0(stem, ".png"),
+    pdf = if (isTRUE(save_pdf)) paste0(stem, ".pdf") else NULL,
+    svg = if (isTRUE(save_svg)) paste0(stem, ".svg") else NULL,
+    tsv = if (!is.null(data)) paste0(stem, ".tsv") else NULL
+  )
+
+  if (!is.null(plot_dir) && isTRUE(save_pdf)) {
+    reportdeck_write_plot_pdf(
+      plot_obj,
+      file.path(plot_dir, file_names$pdf),
+      width = width,
+      height = height
+    )
+  }
+  if (!is.null(plot_dir) && isTRUE(save_svg)) {
+    reportdeck_write_plot_svg(
+      plot_obj,
+      file.path(plot_dir, file_names$svg),
+      width = width,
+      height = height
+    )
+  }
+  if (!is.null(data) && !is.null(data_dir)) {
+    utils::write.table(
+      data,
+      file.path(data_dir, file_names$tsv),
+      sep = "\t",
+      quote = FALSE,
+      row.names = FALSE,
+      na = ""
+    )
+  }
+
+  structure(
+    list(
+      stem = stem,
+      plot_obj = plot_obj,
+      data = data,
+      width = width,
+      height = height,
+      res = res,
+      file_names = file_names,
+      png_uri = report_plot_png_data_uri(plot_obj, width = width, height = height, res = res),
+      pdf_uri = if (isTRUE(save_pdf)) report_plot_pdf_data_uri(plot_obj, width = width, height = height) else NULL,
+      data_uri = if (!is.null(data)) report_text_data_uri(report_tsv_text(data)) else NULL
+    ),
+    class = "reportdeck_plot_bundle"
+  )
+}
+
+report_bundle_download_links <- function(
+  bundle,
+  png_label = "Download PNG",
+  pdf_label = "Download PDF",
+  tsv_label = NULL
+) {
+  if (!inherits(bundle, "reportdeck_plot_bundle")) {
+    stop("'bundle' must be created by report_plot_bundle().", call. = FALSE)
+  }
+
+  links <- list(
+    report_download_link(
+      png_label,
+      bundle$file_names$png,
+      bundle$png_uri
+    )
+  )
+
+  if (!is.null(bundle$pdf_uri) && !is.null(bundle$file_names$pdf)) {
+    links <- c(
+      links,
+      list(report_download_link(pdf_label, bundle$file_names$pdf, bundle$pdf_uri))
+    )
+  }
+
+  if (!is.null(tsv_label) && !is.null(bundle$data_uri) && !is.null(bundle$file_names$tsv)) {
+    links <- c(
+      links,
+      list(report_download_link(tsv_label, bundle$file_names$tsv, bundle$data_uri))
+    )
+  }
+
+  links
+}
+
+report_bundle_asset_bar <- function(
+  asset_label,
+  bundle,
+  png_label = "Download PNG",
+  pdf_label = "Download PDF",
+  tsv_label = NULL,
+  note = NULL
+) {
+  if (!inherits(bundle, "reportdeck_plot_bundle")) {
+    stop("'bundle' must be created by report_plot_bundle().", call. = FALSE)
+  }
+
+  do.call(
+    report_asset_bar,
+    c(
+      list(asset_label),
+      report_bundle_download_links(
+        bundle,
+        png_label = png_label,
+        pdf_label = pdf_label,
+        tsv_label = tsv_label
+      ),
+      list(note = note)
+    )
+  )
 }
 
 reportdeck_require_knitr <- function() {
@@ -164,7 +337,7 @@ render_reportdeck_item_content_markdown <- function(content) {
       res = content$res,
       bg = "white"
     )
-    if (inherits(content$plot_obj, "grob")) grid::grid.draw(content$plot_obj) else print(content$plot_obj)
+    reportdeck_draw_plot(content$plot_obj)
     grDevices::dev.off()
     return(paste0("![](", normalizePath(png_file, winslash = "/", mustWork = FALSE), ")"))
   }

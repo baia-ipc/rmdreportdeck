@@ -10,6 +10,7 @@ library(rmdreportdeck)
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
+bundle <- report_plot_bundle(plot_obj, "plot", data = df)
 ```
 
 # Goal
@@ -19,11 +20,10 @@ This is a minimal example HTML report for `rmdreportdeck`.
 ## Figure
 
 ```{r}
-print(report_asset_bar(
+print(report_bundle_asset_bar(
   "Downloads",
-  report_download_link("PNG", "plot.png", report_plot_png_data_uri(plot_obj)),
-  report_download_link("PDF", "plot.pdf", report_plot_pdf_data_uri(plot_obj)),
-  report_download_link("TSV", "plot.tsv", report_text_data_uri(report_tsv_text(df)))
+  bundle,
+  tsv_label = "TSV"
 ))
 print(plot_obj)
 ```

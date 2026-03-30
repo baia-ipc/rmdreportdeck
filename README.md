@@ -37,6 +37,8 @@ the static counterpart for cases where a plain document output is still needed.
 - packaged HTML shell assets for collapsible sections and report navigation
 - helper functions for embedding downloadable figures and source data inside
   HTML reports
+- bundle helpers for pairing one plot with its downloadable files and source
+  table
 - loop-aware helpers for repeated figures/tables produced inside `for` loops
 - POSIX CLI wrappers `knit2html` and `knit2pdf`
 
@@ -86,6 +88,10 @@ Conventions:
 - render figures and tables inline in standard chunks
 - for important HTML figures/tables, add a `report_asset_bar()` so users can
   download the figure and the source data directly from the page
+- when a plot and its source table travel together, prefer
+  `report_plot_bundle()`, `report_bundle_asset_bar()`, and
+  `report_tsv_download_link()` instead of rebuilding the same three links by
+  hand in every report
 - for repeated loop-generated outputs, keep one `##` subsection and render the
   repeated items inside it with `report_item_panel()` and `report_loop_section()`
 
@@ -97,14 +103,25 @@ library(rmdreportdeck)
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
+bundle <- report_plot_bundle(plot_obj, "plot", data = df)
 
-report_asset_bar(
+report_bundle_asset_bar(
   "Downloads",
-  report_download_link("PNG", "plot.png", report_plot_png_data_uri(plot_obj)),
-  report_download_link("PDF", "plot.pdf", report_plot_pdf_data_uri(plot_obj)),
-  report_download_link("TSV", "plot.tsv", report_text_data_uri(report_tsv_text(df)))
+  bundle,
+  tsv_label = "TSV"
 )
 ```
+
+`report_plot_bundle()` is the non-overlapping high-level helper added on top of
+the existing low-level primitives:
+
+- use `report_download_link()`, `report_plot_*_data_uri()`, and
+  `report_text_data_uri()` directly when you need full manual control
+- use `report_plot_bundle()` plus `report_bundle_asset_bar()` when you want one
+  reusable object representing a plot, its downloadable PNG/PDF, and its TSV
+  source data
+- use `report_tsv_download_link()` when you only need a direct TSV download
+  button for a table
 
 ## Loop-generated outputs
 
@@ -120,14 +137,20 @@ items <- list()
 for (i in seq_len(nrow(df))) {
   row <- df[i, , drop = FALSE]
   plot_obj <- ggplot(row, aes(group, value, fill = group)) + geom_col()
+  bundle <- report_plot_bundle(
+    plot_obj,
+    stem = paste0("sample-", row$group),
+    width = 5,
+    height = 3.5,
+    data = row
+  )
 
   items[[i]] <- report_item_panel(
     title = paste("Sample", row$group),
-    asset_bar = report_asset_bar(
+    asset_bar = report_bundle_asset_bar(
       "Downloads",
-      report_download_link("PNG", paste0("sample-", row$group, ".png"), report_plot_png_data_uri(plot_obj)),
-      report_download_link("PDF", paste0("sample-", row$group, ".pdf"), report_plot_pdf_data_uri(plot_obj)),
-      report_download_link("TSV", paste0("sample-", row$group, ".tsv"), report_text_data_uri(report_tsv_text(row)))
+      bundle,
+      tsv_label = "TSV"
     ),
     report_item_plot(plot_obj),
     report_item_table(row)
