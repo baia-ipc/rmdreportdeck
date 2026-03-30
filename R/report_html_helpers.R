@@ -29,7 +29,7 @@ report_plot_png_data_uri <- function(plot_obj, width = 8, height = 6, res = 144)
     bg = "white"
   )
   on.exit(unlink(png_file), add = TRUE)
-  print(plot_obj)
+  if (inherits(plot_obj, "grob")) grid::grid.draw(plot_obj) else print(plot_obj)
   grDevices::dev.off()
   base64enc::dataURI(file = png_file, mime = "image/png")
 }
@@ -43,7 +43,7 @@ report_plot_pdf_data_uri <- function(plot_obj, width = 8, height = 6) {
     onefile = TRUE
   )
   on.exit(unlink(pdf_file), add = TRUE)
-  print(plot_obj)
+  if (inherits(plot_obj, "grob")) grid::grid.draw(plot_obj) else print(plot_obj)
   grDevices::dev.off()
   base64enc::dataURI(file = pdf_file, mime = "application/pdf")
 }
