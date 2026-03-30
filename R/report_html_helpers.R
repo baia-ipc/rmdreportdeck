@@ -164,7 +164,7 @@ render_reportdeck_item_content_markdown <- function(content) {
       res = content$res,
       bg = "white"
     )
-    print(content$plot_obj)
+    if (inherits(content$plot_obj, "grob")) grid::grid.draw(content$plot_obj) else print(content$plot_obj)
     grDevices::dev.off()
     return(paste0("![](", normalizePath(png_file, winslash = "/", mustWork = FALSE), ")"))
   }
