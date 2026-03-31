@@ -107,7 +107,13 @@ library(rmdreportdeck)
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
-bundle <- report_plot_bundle(plot_obj, "plot", data = df)
+block_prefix <- "V01.01"
+bundle <- report_plot_bundle(
+  plot_obj,
+  block_prefix = block_prefix,
+  suffix = "plot",
+  data = df
+)
 
 report_bundle_asset_bar(
   "Downloads",
@@ -126,6 +132,7 @@ the existing low-level primitives:
   source data
 - use `report_tsv_download_link()` when you only need a direct TSV download
   button for a table
+- bundle naming is standardized automatically from one `block_prefix`
 
 ## Standardized asset naming
 
@@ -161,6 +168,19 @@ Use the bundle helpers instead when:
 
 - one plot and one source table travel together as a single reusable object
 - the main need is automatic download-link assembly rather than naming policy
+
+The two layers are compatible. A standardized bundle can use a figure-prefixed
+plot stem and a table-prefixed TSV stem derived from one block identifier:
+
+```r
+block_prefix <- "V01.03"
+bundle <- report_plot_bundle(
+  plot_obj,
+  block_prefix = block_prefix,
+  suffix = "nGenes_per_sample",
+  data = df
+)
+```
 
 ## Loop-generated outputs
 

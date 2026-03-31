@@ -141,7 +141,9 @@ report_asset_bar <- function(asset_label, ..., note = NULL) {
 
 report_plot_bundle <- function(
   plot_obj,
-  stem,
+  block_prefix,
+  suffix = NULL,
+  descriptor = NULL,
   width = 8,
   height = 6,
   data = NULL,
@@ -151,8 +153,8 @@ report_plot_bundle <- function(
   save_pdf = TRUE,
   save_svg = FALSE
 ) {
-  if (!is.character(stem) || length(stem) != 1L || !nzchar(stem)) {
-    stop("'stem' must be a single non-empty character string.", call. = FALSE)
+  if (!is.character(block_prefix) || length(block_prefix) != 1L || !nzchar(block_prefix)) {
+    stop("'block_prefix' must be a single non-empty character string.", call. = FALSE)
   }
 
   if (!is.null(plot_dir)) {
@@ -162,11 +164,14 @@ report_plot_bundle <- function(
     dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
   }
 
+  plot_stem <- report_figure_name(block_prefix, suffix = suffix, descriptor = descriptor)
+  table_stem <- report_table_name(block_prefix, suffix = suffix, descriptor = descriptor)
+
   file_names <- list(
-    png = paste0(stem, ".png"),
-    pdf = if (isTRUE(save_pdf)) paste0(stem, ".pdf") else NULL,
-    svg = if (isTRUE(save_svg)) paste0(stem, ".svg") else NULL,
-    tsv = if (!is.null(data)) paste0(stem, ".tsv") else NULL
+    png = paste0(plot_stem, ".png"),
+    pdf = if (isTRUE(save_pdf)) paste0(plot_stem, ".pdf") else NULL,
+    svg = if (isTRUE(save_svg)) paste0(plot_stem, ".svg") else NULL,
+    tsv = if (!is.null(data)) paste0(table_stem, ".tsv") else NULL
   )
 
   if (!is.null(plot_dir) && isTRUE(save_pdf)) {
@@ -198,7 +203,10 @@ report_plot_bundle <- function(
 
   structure(
     list(
-      stem = stem,
+      stem = plot_stem,
+      block_prefix = block_prefix,
+      suffix = suffix,
+      descriptor = descriptor,
       plot_obj = plot_obj,
       data = data,
       width = width,

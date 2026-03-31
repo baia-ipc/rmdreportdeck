@@ -14,7 +14,7 @@ make_mock_rmd <- function(path) {
       "library(rmdreportdeck)",
       "df <- data.frame(group = c(\"A\", \"B\"), value = c(2, 5))",
       "plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()",
-      "bundle <- report_plot_bundle(plot_obj, \"plot\", width = 6, height = 4, data = df)",
+      "bundle <- report_plot_bundle(plot_obj, block_prefix = \"V01.01\", suffix = \"plot\", width = 6, height = 4, data = df)",
       "```",
       "",
       "# Description",
@@ -109,7 +109,8 @@ make_mock_loop_rmd <- function(path, output_format = "html_document") {
       "  plot_obj <- ggplot(row, aes(sample, value, fill = sample)) + geom_col(show.legend = FALSE)",
       "  bundle <- report_plot_bundle(",
       "    plot_obj,",
-      "    stem = paste0(\"sample-\", row$sample),",
+      "    block_prefix = paste0(\"V01.\", sprintf(\"%02d\", i)),",
+      "    suffix = row$sample,",
       "    width = 5,",
       "    height = 3.5,",
       "    data = row,",
@@ -160,7 +161,8 @@ test_that("bundle helpers create download bundles and optional files", {
 
   bundle <- report_plot_bundle(
     plot_obj,
-    stem = "synthetic-plot",
+    block_prefix = "V01.01",
+    suffix = "synthetic_plot",
     width = 6,
     height = 4,
     data = df,
@@ -170,9 +172,9 @@ test_that("bundle helpers create download bundles and optional files", {
   )
 
   expect_s3_class(bundle, "reportdeck_plot_bundle")
-  expect_true(file.exists(file.path(plot_dir, "synthetic-plot.pdf")))
-  expect_true(file.exists(file.path(plot_dir, "synthetic-plot.svg")))
-  expect_true(file.exists(file.path(data_dir, "synthetic-plot.tsv")))
+  expect_true(file.exists(file.path(plot_dir, "FigV01.01.synthetic_plot.pdf")))
+  expect_true(file.exists(file.path(plot_dir, "FigV01.01.synthetic_plot.svg")))
+  expect_true(file.exists(file.path(data_dir, "TabV01.01.synthetic_plot.tsv")))
   expect_match(bundle$png_uri, "^data:image/png;base64,")
   expect_match(bundle$pdf_uri, "^data:application/pdf;base64,")
   expect_match(bundle$data_uri, "^data:text/tab-separated-values")
@@ -181,13 +183,32 @@ test_that("bundle helpers create download bundles and optional files", {
   expect_length(links, 3)
 
   asset_bar_html <- as.character(report_bundle_asset_bar("Downloads", bundle, tsv_label = "TSV"))
-  expect_match(asset_bar_html, "synthetic-plot.png")
-  expect_match(asset_bar_html, "synthetic-plot.pdf")
-  expect_match(asset_bar_html, "synthetic-plot.tsv")
+  expect_match(asset_bar_html, "FigV01.01.synthetic_plot.png")
+  expect_match(asset_bar_html, "FigV01.01.synthetic_plot.pdf")
+  expect_match(asset_bar_html, "TabV01.01.synthetic_plot.tsv")
 
   table_link_html <- as.character(report_tsv_download_link(df, "table.tsv", "Table TSV"))
   expect_match(table_link_html, "table.tsv")
   expect_match(table_link_html, "Table TSV")
+})
+
+test_that("bundle helpers derive figure and table names from one block prefix", {
+  skip_if_not_installed("ggplot2")
+
+  df <- data.frame(group = c("A", "B"), value = c(2, 5))
+  plot_obj <- ggplot2::ggplot(df, ggplot2::aes(group, value, fill = group)) + ggplot2::geom_col()
+
+  bundle <- report_plot_bundle(
+    plot_obj,
+    block_prefix = "V01.03",
+    suffix = "nGenes_per_sample",
+    data = df
+  )
+
+  expect_identical(bundle$stem, "FigV01.03.nGenes_per_sample")
+  expect_identical(bundle$file_names$png, "FigV01.03.nGenes_per_sample.png")
+  expect_identical(bundle$file_names$pdf, "FigV01.03.nGenes_per_sample.pdf")
+  expect_identical(bundle$file_names$tsv, "TabV01.03.nGenes_per_sample.tsv")
 })
 
 test_that("asset naming helpers apply the standard block naming format", {
@@ -225,6 +246,10 @@ test_that("asset naming helpers reject invalid inputs", {
   expect_error(
     report_asset_name("Fig", "V01.03", descriptor = ""),
     "descriptor"
+  )
+  expect_error(
+    report_plot_bundle(NULL, block_prefix = ""),
+    "block_prefix"
   )
 })
 
@@ -311,8 +336,8 @@ test_that("loop section renderer creates collapsible item panels", {
   expect_match(html_text, "sample-s1-alpha-beta")
   expect_match(html_text, "report-item-table-wrap")
   expect_match(html_text, "report-item-plot-card")
-  expect_match(html_text, "sample-S1.tsv")
-  expect_match(html_text, "sample-S1.pdf")
+  expect_match(html_text, "TabV01.01.S1.tsv")
+  expect_match(html_text, "FigV01.01.S1.pdf")
   expect_match(html_text, "data-open-first=\"true\"")
   expect_false(grepl("&lt;div class=&quot;report-asset-bar&quot;", html_text, fixed = TRUE))
   expect_false(grepl("items &lt;- vector", html_text, fixed = TRUE))

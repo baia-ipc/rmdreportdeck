@@ -29,7 +29,8 @@ for (i in seq_len(nrow(samples))) {
     geom_col(show.legend = FALSE)
   bundle <- report_plot_bundle(
     plot_obj,
-    stem = paste0("sample-", row$sample),
+    block_prefix = paste0("V01.", sprintf("%02d", i)),
+    suffix = row$sample,
     width = 5,
     height = 3.5,
     data = row

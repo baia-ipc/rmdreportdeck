@@ -72,7 +72,7 @@ library(rmdreportdeck)
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
-bundle <- report_plot_bundle(plot_obj, "plot", data = df)
+bundle <- report_plot_bundle(plot_obj, block_prefix = "V01.01", suffix = "plot", data = df)
 ```
 
 # Goal
@@ -112,7 +112,8 @@ for (i in seq_len(nrow(samples))) {
   plot_obj <- ggplot(row, aes(sample, value, fill = sample)) + geom_col()
   bundle <- report_plot_bundle(
     plot_obj,
-    stem = paste0("sample-", row$sample),
+    block_prefix = paste0("V01.", sprintf("%02d", i)),
+    suffix = row$sample,
     width = 5,
     height = 3.5,
     data = row
@@ -154,7 +155,8 @@ Use the bundle helpers when:
 ```{r eval=FALSE}
 bundle <- report_plot_bundle(
   plot_obj,
-  stem = "figure-01",
+  block_prefix = "V01.03",
+  suffix = "figure",
   width = 8,
   height = 6,
   data = df,
@@ -204,8 +206,8 @@ print(report_asset_bar(
 ```
 ````
 
-Use the naming helpers for naming policy. Use the bundle helpers for download
-assembly when one plot and one table naturally belong together.
+The bundle helpers already use the naming policy internally. Use the naming
+helpers directly when you are not creating a bundle.
 
 # Rendering
 

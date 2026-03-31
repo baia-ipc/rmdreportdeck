@@ -11,7 +11,9 @@ downloadable PNG/PDF assets and optional TSV source data.
 \usage{
 report_plot_bundle(
   plot_obj,
-  stem,
+  block_prefix,
+  suffix = NULL,
+  descriptor = NULL,
   width = 8,
   height = 6,
   data = NULL,
@@ -44,8 +46,15 @@ report_tsv_download_link(df, filename, label = "Download TSV")
   \item{plot_obj}{A plot object that can be printed, such as a \code{ggplot}
   object or grob.}
 
-  \item{stem}{Base filename stem used for generated download names such as
-  \code{stem.pdf} and \code{stem.tsv}.}
+  \item{block_prefix}{A standardized block identifier such as
+  \code{"V01.03"}. The bundle computes a figure stem with
+  \code{report_figure_name()} and a table stem with \code{report_table_name()}.}
+
+  \item{suffix}{Optional suffix passed through to the standardized naming
+  helpers when \code{block_prefix} is used.}
+
+  \item{descriptor}{Optional descriptor passed through to the standardized
+  naming helpers when \code{block_prefix} is used.}
 
   \item{width, height}{Plot dimensions in inches.}
 
@@ -95,6 +104,11 @@ provided by \pkg{rmdreportdeck}, such as \code{report_download_link()},
 Use the bundle helpers when one plot and one table travel together repeatedly,
 especially inside loops. Use the lower-level primitives directly when you need
 custom link composition or non-TSV payloads.
+
+The helpers are intentionally aligned with the standardized naming layer. A
+bundle always derives \code{Fig...} and \code{Tab...} names from one
+\code{block_prefix}, plus the optional shared \code{suffix} and
+\code{descriptor}.
 }
 \examples{
 if (requireNamespace("ggplot2", quietly = TRUE)) {
@@ -102,7 +116,13 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
   plot_obj <- ggplot2::ggplot(df, ggplot2::aes(group, value, fill = group)) +
     ggplot2::geom_col()
 
-  bundle <- report_plot_bundle(plot_obj, "plot", data = df)
+  block_prefix <- "V01.01"
+  bundle <- report_plot_bundle(
+    plot_obj,
+    block_prefix = block_prefix,
+    suffix = "plot",
+    data = df
+  )
   report_bundle_download_links(bundle, tsv_label = "TSV")
   report_bundle_asset_bar("Downloads", bundle, tsv_label = "TSV")
   report_tsv_download_link(df, "plot.tsv", "TSV")

@@ -10,7 +10,7 @@ library(rmdreportdeck)
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
-bundle <- report_plot_bundle(plot_obj, "plot", data = df)
+bundle <- report_plot_bundle(plot_obj, block_prefix = "V01.01", suffix = "plot", data = df)
 ```
 
 # Goal
