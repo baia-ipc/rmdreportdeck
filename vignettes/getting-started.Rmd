@@ -19,6 +19,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 - PDF rendering with the same `.runinfo` provenance sidecar
 - helper functions for embedding downloadable figure and data assets in HTML reports
 - higher-level bundle helpers for the common “plot + downloadable source table” pattern
+- standardized asset naming helpers for block-oriented reports
 - loop-aware item panels for repeated outputs created inside `for` loops
 - thin POSIX CLI wrappers for `knit2html` and `knit2pdf`
 
@@ -45,6 +46,13 @@ The package has two download-helper layers:
 
 - low-level primitives such as `report_download_link()`, `report_plot_png_data_uri()`, and `report_text_data_uri()`
 - a convenience bundle layer built around `report_plot_bundle()`, `report_bundle_download_links()`, `report_bundle_asset_bar()`, and `report_tsv_download_link()`
+
+It also provides a naming layer for reports that use block identifiers such as
+`V01.03`:
+
+- `report_asset_name()`
+- `report_figure_name()`
+- `report_table_name()`
 
 Use the bundle layer when one plot and one data frame belong together and you
 do not need custom download assembly logic.
@@ -158,6 +166,46 @@ bundle <- report_plot_bundle(
 report_bundle_asset_bar("Figure 1", bundle, tsv_label = "Source TSV")
 report_tsv_download_link(df, "table.tsv", "Table TSV")
 ```
+
+# Standardized asset naming
+
+Use the naming helpers when the report has a section or block prefix and the
+same name should drive filenames, download controls, and visible labels.
+
+The naming convention is:
+
+`<asset_type><block_prefix>[.<suffix>][-<descriptor>]`
+
+```{r eval=FALSE}
+block_prefix <- "V01.03"
+
+figure_stem <- report_figure_name(block_prefix, "nGenes_per_sample")
+table_name <- report_table_name(block_prefix, "nGenes_per_sample.tsv")
+aux_name <- report_asset_name("Aux", block_prefix, "qc", "raw")
+```
+
+Typical report usage:
+
+````markdown
+```{r}
+block_prefix <- "V01.03"
+figure_stem <- report_figure_name(block_prefix, "nGenes_per_sample")
+figure_pdf <- paste0(figure_stem, ".pdf")
+table_name <- report_table_name(block_prefix, "nGenes_per_sample.tsv")
+
+ggsave(file.path("results/plots", figure_pdf), plot_obj, width = 8, height = 6)
+write.table(df, file.path("results/data", table_name), sep = "\t", quote = FALSE, row.names = FALSE)
+
+print(report_asset_bar(
+  figure_stem,
+  report_download_link("Download PNG", paste0(figure_stem, ".png"), png_uri),
+  report_download_link("Download PDF", figure_pdf, pdf_uri)
+))
+```
+````
+
+Use the naming helpers for naming policy. Use the bundle helpers for download
+assembly when one plot and one table naturally belong together.
 
 # Rendering
 

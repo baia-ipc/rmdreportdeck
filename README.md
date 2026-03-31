@@ -39,6 +39,7 @@ the static counterpart for cases where a plain document output is still needed.
   HTML reports
 - bundle helpers for pairing one plot with its downloadable files and source
   table
+- standardized asset naming helpers for block-oriented report sections
 - loop-aware helpers for repeated figures/tables produced inside `for` loops
 - POSIX CLI wrappers `knit2html` and `knit2pdf`
 
@@ -92,6 +93,9 @@ Conventions:
   `report_plot_bundle()`, `report_bundle_asset_bar()`, and
   `report_tsv_download_link()` instead of rebuilding the same three links by
   hand in every report
+- when a report uses per-section identifiers such as `V01.03`, derive labels
+  and filenames with `report_asset_name()`, `report_figure_name()`, and
+  `report_table_name()` instead of open-coded string concatenation
 - for repeated loop-generated outputs, keep one `##` subsection and render the
   repeated items inside it with `report_item_panel()` and `report_loop_section()`
 
@@ -122,6 +126,41 @@ the existing low-level primitives:
   source data
 - use `report_tsv_download_link()` when you only need a direct TSV download
   button for a table
+
+## Standardized asset naming
+
+When a report follows a block-style naming scheme, keep the naming logic in one
+place and reuse it for filenames and asset-bar labels.
+
+The naming helpers use this format:
+
+`<asset_type><block_prefix>[.<suffix>][-<descriptor>]`
+
+Example:
+
+```r
+block_prefix <- "V01.03"
+
+figure_stem <- report_figure_name(block_prefix, "nGenes_per_sample")
+table_name <- report_table_name(block_prefix, "nGenes_per_sample.tsv")
+
+figure_stem
+# "FigV01.03.nGenes_per_sample"
+
+table_name
+# "TabV01.03.nGenes_per_sample.tsv"
+```
+
+Use the helpers when:
+
+- the report already numbers sections or blocks
+- the same name should appear in the saved filename and the visible asset bar
+- you want a stable naming convention across multiple reports
+
+Use the bundle helpers instead when:
+
+- one plot and one source table travel together as a single reusable object
+- the main need is automatic download-link assembly rather than naming policy
 
 ## Loop-generated outputs
 

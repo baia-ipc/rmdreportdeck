@@ -190,6 +190,44 @@ test_that("bundle helpers create download bundles and optional files", {
   expect_match(table_link_html, "Table TSV")
 })
 
+test_that("asset naming helpers apply the standard block naming format", {
+  expect_identical(
+    report_asset_name("Fig", "V01.03"),
+    "FigV01.03"
+  )
+  expect_identical(
+    report_figure_name("V01.03", "nGenes_per_sample"),
+    "FigV01.03.nGenes_per_sample"
+  )
+  expect_identical(
+    report_table_name("V01.03", "nGenes_per_sample.tsv"),
+    "TabV01.03.nGenes_per_sample.tsv"
+  )
+  expect_identical(
+    report_asset_name("Aux", "V01.03", "qc", "raw"),
+    "AuxV01.03.qc-raw"
+  )
+})
+
+test_that("asset naming helpers reject invalid inputs", {
+  expect_error(
+    report_asset_name("", "V01.03"),
+    "asset_type"
+  )
+  expect_error(
+    report_asset_name("Fig", ""),
+    "block_prefix"
+  )
+  expect_error(
+    report_asset_name("Fig", "V01.03", ""),
+    "suffix"
+  )
+  expect_error(
+    report_asset_name("Fig", "V01.03", descriptor = ""),
+    "descriptor"
+  )
+})
+
 test_that("HTML renderer creates interactive report and runinfo", {
   skip_if_render_stack_missing()
 

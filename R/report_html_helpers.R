@@ -94,6 +94,39 @@ report_tsv_download_link <- function(df, filename, label = "Download TSV") {
   )
 }
 
+report_asset_name <- function(asset_type, block_prefix, suffix = NULL, descriptor = NULL) {
+  if (!is.character(asset_type) || length(asset_type) != 1L || !nzchar(asset_type)) {
+    stop("'asset_type' must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.character(block_prefix) || length(block_prefix) != 1L || !nzchar(block_prefix)) {
+    stop("'block_prefix' must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.null(suffix) && (!is.character(suffix) || length(suffix) != 1L || !nzchar(suffix))) {
+    stop("'suffix' must be NULL or a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.null(descriptor) && (!is.character(descriptor) || length(descriptor) != 1L || !nzchar(descriptor))) {
+    stop("'descriptor' must be NULL or a single non-empty character string.", call. = FALSE)
+  }
+
+  name <- paste0(asset_type, block_prefix)
+  if (!is.null(suffix)) {
+    name <- paste0(name, ".", suffix)
+  }
+  if (!is.null(descriptor)) {
+    name <- paste0(name, "-", descriptor)
+  }
+
+  name
+}
+
+report_figure_name <- function(block_prefix, suffix = NULL, descriptor = NULL) {
+  report_asset_name("Fig", block_prefix, suffix = suffix, descriptor = descriptor)
+}
+
+report_table_name <- function(block_prefix, suffix = NULL, descriptor = NULL) {
+  report_asset_name("Tab", block_prefix, suffix = suffix, descriptor = descriptor)
+}
+
 report_asset_bar <- function(asset_label, ..., note = NULL) {
   controls <- list(...)
   children <- list(
