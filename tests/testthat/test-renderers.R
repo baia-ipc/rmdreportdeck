@@ -318,6 +318,31 @@ test_that("runinfo follows an explicit relative output path", {
   expect_true(file.exists(runinfo_file))
 })
 
+test_that("default output follows the invoked symlink path", {
+  skip_if_render_stack_missing()
+
+  tmp_dir <- tempfile("rmdreportdeck-symlink-output-")
+  dir.create(tmp_dir, recursive = TRUE)
+  src_dir <- file.path(tmp_dir, "src")
+  out_dir <- file.path(tmp_dir, "out")
+  dir.create(src_dir)
+  dir.create(out_dir)
+
+  rmd_source <- file.path(src_dir, "report.Rmd")
+  rmd_link <- file.path(out_dir, "report.Rmd")
+  make_mock_rmd(rmd_source)
+  file.symlink(rmd_source, rmd_link)
+
+  html_file <- render_html_report_with_runinfo(rmd_link, params = list(report_title = "Synthetic Title"))
+  runinfo_file <- file.path(out_dir, "report.runinfo")
+
+  expect_identical(html_file, normalizePath(file.path(out_dir, "report.html"), mustWork = FALSE))
+  expect_true(file.exists(html_file))
+  expect_true(file.exists(runinfo_file))
+  expect_false(file.exists(file.path(src_dir, "report.html")))
+  expect_false(file.exists(file.path(src_dir, "report.runinfo")))
+})
+
 test_that("loop section renderer creates collapsible item panels", {
   skip_if_render_stack_missing()
 

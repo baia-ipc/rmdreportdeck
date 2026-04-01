@@ -26,7 +26,14 @@ parse_cli_params <- function(values) {
 }
 
 normalize_report_path <- function(path) {
-  normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (grepl("^/", path)) {
+    return(gsub("/+", "/", path))
+  }
+  gsub("/+", "/", file.path(getwd(), path))
+}
+
+absolute_cli_path <- function(path) {
+  normalize_report_path(path)
 }
 
 default_output_basename <- function(input, extension) {
@@ -42,7 +49,7 @@ ensure_extension <- function(path, extension) {
 }
 
 resolve_expected_output_path <- function(input, output_file = NULL, extension) {
-  input_path <- normalizePath(input, mustWork = TRUE)
+  input_path <- absolute_cli_path(input)
   input_dir <- dirname(input_path)
 
   if (is.null(output_file) || !nzchar(output_file)) {
@@ -103,15 +110,41 @@ read_memtotal <- function() {
   match[[1]]
 }
 
+relocate_rendered_output <- function(rendered, expected_output) {
+  rendered_path <- normalize_report_path(rendered)
+  expected_path <- normalize_report_path(expected_output)
+
+  if (identical(rendered_path, expected_path) || !file.exists(rendered_path)) {
+    return(expected_path)
+  }
+
+  dir.create(dirname(expected_path), recursive = TRUE, showWarnings = FALSE)
+  if (file.exists(expected_path)) {
+    unlink(expected_path)
+  }
+
+  moved <- file.rename(rendered_path, expected_path)
+  if (!isTRUE(moved)) {
+    ok <- file.copy(rendered_path, expected_path, overwrite = TRUE)
+    if (!isTRUE(ok)) {
+      stop("Failed to move rendered report to expected output path.", call. = FALSE)
+    }
+    unlink(rendered_path)
+  }
+
+  expected_path
+}
+
 render_html_report <- function(input, params = list(), output_file = NULL, envir = new.env(parent = globalenv())) {
-  rmd_file <- normalizePath(input, mustWork = TRUE)
+  rmd_file <- absolute_cli_path(input)
   assets <- report_asset_paths()
+  final_output <- resolve_expected_output_path(rmd_file, output_file, ".html")
 
   rmarkdown::render(
     input = rmd_file,
     output_format = "html_document",
     params = params,
-    output_file = output_file,
+    output_file = final_output,
     output_options = list(
       pandoc_args = c(
         "--lua-filter", assets$lua_filter,
@@ -124,13 +157,14 @@ render_html_report <- function(input, params = list(), output_file = NULL, envir
 }
 
 render_pdf_report <- function(input, params = list(), output_file = NULL, envir = new.env(parent = globalenv())) {
-  rmd_file <- normalizePath(input, mustWork = TRUE)
+  rmd_file <- absolute_cli_path(input)
+  final_output <- resolve_expected_output_path(rmd_file, output_file, ".pdf")
 
   rmarkdown::render(
     input = rmd_file,
     output_format = "pdf_document",
     params = params,
-    output_file = output_file,
+    output_file = final_output,
     envir = envir
   )
 }
@@ -188,7 +222,7 @@ render_html_report_with_runinfo <- function(input, params = list(), output_file 
   timing <- system.time({
     rendered <- render_html_report(input = input, params = params, output_file = output_file)
   })
-  final_output <- if (file.exists(expected_output)) expected_output else normalize_report_path(rendered)
+  final_output <- relocate_rendered_output(rendered, expected_output)
   write_runinfo(
     output_report = final_output,
     command = command,
@@ -204,7 +238,7 @@ render_pdf_report_with_runinfo <- function(input, params = list(), output_file =
   timing <- system.time({
     rendered <- render_pdf_report(input = input, params = params, output_file = output_file)
   })
-  final_output <- if (file.exists(expected_output)) expected_output else normalize_report_path(rendered)
+  final_output <- relocate_rendered_output(rendered, expected_output)
   write_runinfo(
     output_report = final_output,
     command = command,
