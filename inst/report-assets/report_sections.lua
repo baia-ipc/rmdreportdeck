@@ -51,7 +51,7 @@ local function should_open_section(header)
 end
 
 local function build_section_body(header, blocks)
-  local processed_blocks = wrap_level2_sections(blocks)
+  local processed_blocks = wrap_level_sections(blocks, 2)
   local classes = { "section", "level1" }
   for _, class in ipairs(clone_classes(header.classes)) do
     table.insert(classes, class)
@@ -61,13 +61,21 @@ local function build_section_body(header, blocks)
   return pandoc.Div(processed_blocks, pandoc.Attr("", classes, header.attributes))
 end
 
-local function build_subsection_body(header, blocks)
-  local classes = { "report-subsection-body" }
+local function build_subsection_body(header, blocks, level)
+  local processed_blocks = blocks
+  if level < 4 then
+    processed_blocks = wrap_level_sections(blocks, level + 1)
+  end
+
+  local classes = {
+    "report-subsection-body",
+    "report-subsection-body-level-" .. tostring(level)
+  }
   for _, class in ipairs(clone_classes(header.classes)) do
     table.insert(classes, class)
   end
 
-  return pandoc.Div(blocks, pandoc.Attr("", classes, header.attributes))
+  return pandoc.Div(processed_blocks, pandoc.Attr("", classes, header.attributes))
 end
 
 local function wrap_subsection(header, blocks)
@@ -80,7 +88,8 @@ local function wrap_subsection(header, blocks)
   end
 
   local title = escape_html(pandoc.utils.stringify(header.content))
-  local detail_attrs = 'class="report-subsection"'
+  local level = header.level
+  local detail_attrs = 'class="report-subsection report-subsection-level-' .. tostring(level) .. '"'
   if header.identifier ~= "" then
     detail_attrs = 'id="' .. escape_html(header.identifier) .. '" ' .. detail_attrs
   end
@@ -90,12 +99,12 @@ local function wrap_subsection(header, blocks)
 
   return {
     pandoc.RawBlock("html", "<details " .. detail_attrs .. '><summary><span class="report-subsection-title">' .. title .. "</span></summary>"),
-    build_subsection_body(header, blocks),
+    build_subsection_body(header, blocks, level),
     pandoc.RawBlock("html", "</details>")
   }
 end
 
-function wrap_level2_sections(blocks)
+function wrap_level_sections(blocks, level)
   local rebuilt = {}
   local current_header = nil
   local current_blocks = {}
@@ -114,7 +123,7 @@ function wrap_level2_sections(blocks)
   end
 
   for _, block in ipairs(blocks) do
-    if block.t == "Header" and block.level == 2 then
+    if block.t == "Header" and block.level == level then
       flush_subsection()
       current_header = block
     elseif current_header ~= nil then

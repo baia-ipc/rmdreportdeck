@@ -59,25 +59,134 @@ report_tsv_text <- function(df) {
   paste(out, collapse = "\n")
 }
 
+reportdeck_download_asset <- function(kind, ...) {
+  structure(
+    c(list(kind = kind), list(...)),
+    class = "reportdeck_download_asset"
+  )
+}
+
+reportdeck_asset_dir <- function() {
+  if (!reportdeck_is_linked_mode()) {
+    return(NULL)
+  }
+  getOption("rmdreportdeck.asset_dir")
+}
+
+reportdeck_asset_href <- function(filename) {
+  asset_dir <- reportdeck_asset_dir()
+  if (is.null(asset_dir)) {
+    return(NULL)
+  }
+  file.path(basename(dirname(asset_dir)), basename(asset_dir), filename)
+}
+
+reportdeck_write_text_file <- function(text, path) {
+  writeLines(enc2utf8(text), con = path, useBytes = TRUE)
+  invisible(path)
+}
+
+reportdeck_asset_data_uri <- function(asset) {
+  if (!inherits(asset, "reportdeck_download_asset")) {
+    return(asset)
+  }
+
+  switch(
+    asset$kind,
+    text = base64enc::dataURI(data = charToRaw(enc2utf8(asset$text)), mime = asset$mime),
+    plot_png = {
+      png_file <- tempfile(fileext = ".png")
+      on.exit(unlink(png_file), add = TRUE)
+      reportdeck_write_plot_png(
+        asset$plot_obj,
+        png_file,
+        width = asset$width,
+        height = asset$height,
+        res = asset$res
+      )
+      base64enc::dataURI(file = png_file, mime = asset$mime)
+    },
+    plot_pdf = {
+      pdf_file <- tempfile(fileext = ".pdf")
+      on.exit(unlink(pdf_file), add = TRUE)
+      reportdeck_write_plot_pdf(
+        asset$plot_obj,
+        pdf_file,
+        width = asset$width,
+        height = asset$height
+      )
+      base64enc::dataURI(file = pdf_file, mime = asset$mime)
+    },
+    stop("Unsupported download asset kind: ", asset$kind, call. = FALSE)
+  )
+}
+
+reportdeck_materialize_download_asset <- function(asset, filename) {
+  if (!inherits(asset, "reportdeck_download_asset")) {
+    return(asset)
+  }
+
+  asset_dir <- reportdeck_asset_dir()
+  if (is.null(asset_dir)) {
+    return(reportdeck_asset_data_uri(asset))
+  }
+
+  dir.create(asset_dir, recursive = TRUE, showWarnings = FALSE)
+  asset_path <- file.path(asset_dir, filename)
+
+  switch(
+    asset$kind,
+    text = reportdeck_write_text_file(asset$text, asset_path),
+    plot_png = reportdeck_write_plot_png(
+      asset$plot_obj,
+      asset_path,
+      width = asset$width,
+      height = asset$height,
+      res = asset$res
+    ),
+    plot_pdf = reportdeck_write_plot_pdf(
+      asset$plot_obj,
+      asset_path,
+      width = asset$width,
+      height = asset$height
+    ),
+    stop("Unsupported download asset kind: ", asset$kind, call. = FALSE)
+  )
+
+  reportdeck_asset_href(filename)
+}
+
+as.character.reportdeck_download_asset <- function(x, ...) {
+  reportdeck_asset_data_uri(x)
+}
+
 report_text_data_uri <- function(text, mime = "text/tab-separated-values;charset=utf-8") {
-  base64enc::dataURI(data = charToRaw(enc2utf8(text)), mime = mime)
+  reportdeck_download_asset("text", text = text, mime = mime)
 }
 
 report_plot_png_data_uri <- function(plot_obj, width = 8, height = 6, res = 144) {
-  png_file <- tempfile(fileext = ".png")
-  on.exit(unlink(png_file), add = TRUE)
-  reportdeck_write_plot_png(plot_obj, png_file, width = width, height = height, res = res)
-  base64enc::dataURI(file = png_file, mime = "image/png")
+  reportdeck_download_asset(
+    "plot_png",
+    plot_obj = plot_obj,
+    width = width,
+    height = height,
+    res = res,
+    mime = "image/png"
+  )
 }
 
 report_plot_pdf_data_uri <- function(plot_obj, width = 8, height = 6) {
-  pdf_file <- tempfile(fileext = ".pdf")
-  on.exit(unlink(pdf_file), add = TRUE)
-  reportdeck_write_plot_pdf(plot_obj, pdf_file, width = width, height = height)
-  base64enc::dataURI(file = pdf_file, mime = "application/pdf")
+  reportdeck_download_asset(
+    "plot_pdf",
+    plot_obj = plot_obj,
+    width = width,
+    height = height,
+    mime = "application/pdf"
+  )
 }
 
 report_download_link <- function(label, filename, href) {
+  href <- reportdeck_materialize_download_asset(href, filename)
   htmltools::tags$a(
     label,
     href = href,
@@ -87,16 +196,6 @@ report_download_link <- function(label, filename, href) {
 }
 
 report_tsv_download_link <- function(df, filename, label = "Download TSV") {
-  if (reportdeck_is_linked_mode()) {
-    asset_dir <- getOption("rmdreportdeck.asset_dir")
-    if (!is.null(asset_dir)) {
-      dir.create(asset_dir, recursive = TRUE, showWarnings = FALSE)
-      utils::write.table(df, file.path(asset_dir, filename),
-        sep = "\t", quote = FALSE, row.names = FALSE, na = "")
-      href <- file.path(basename(dirname(asset_dir)), basename(asset_dir), filename)
-      return(report_download_link(label = label, filename = filename, href = href))
-    }
-  }
   report_download_link(
     label = label,
     filename = filename,
@@ -265,9 +364,9 @@ report_plot_bundle <- function(
       sep = "\t", quote = FALSE, row.names = FALSE, na = "")
   }
 
-  png_uri  <- report_plot_png_data_uri(plot_obj, width = width, height = height, res = res)
-  pdf_uri  <- if (isTRUE(save_pdf)) report_plot_pdf_data_uri(plot_obj, width = width, height = height) else NULL
-  data_uri <- if (!is.null(data)) report_text_data_uri(report_tsv_text(data)) else NULL
+  png_uri  <- reportdeck_asset_data_uri(report_plot_png_data_uri(plot_obj, width = width, height = height, res = res))
+  pdf_uri  <- if (isTRUE(save_pdf)) reportdeck_asset_data_uri(report_plot_pdf_data_uri(plot_obj, width = width, height = height)) else NULL
+  data_uri <- if (!is.null(data)) reportdeck_asset_data_uri(report_text_data_uri(report_tsv_text(data))) else NULL
 
   structure(
     list(
@@ -419,12 +518,12 @@ render_reportdeck_item_content_html <- function(content, prefix = NULL) {
         ))
       }
     }
-    png_uri <- report_plot_png_data_uri(
+    png_uri <- reportdeck_asset_data_uri(report_plot_png_data_uri(
       content$plot_obj,
       width = content$width,
       height = content$height,
       res = content$res
-    )
+    ))
     return(htmltools::tags$div(
       class = "report-item-plot-card report-plot-card",
       do.call(

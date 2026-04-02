@@ -8,6 +8,15 @@
     return toArray(document.querySelectorAll("details.report-section, details.report-subsection"));
   }
 
+  function getSectionTitleNode(section) {
+    return section.querySelector(":scope > summary .report-section-title, :scope > summary .report-subsection-title");
+  }
+
+  function getSectionTitleText(section) {
+    var titleNode = getSectionTitleNode(section);
+    return titleNode ? titleNode.textContent : section.id;
+  }
+
   function slugify(text) {
     return String(text || "")
       .toLowerCase()
@@ -17,66 +26,75 @@
   }
 
   function addNestedSubsections() {
-    toArray(document.querySelectorAll("details.report-section > .report-section-body")).forEach(function (body) {
-      var hasExistingSubsections = toArray(body.children).some(function (node) {
-        return node.tagName === "DETAILS" && node.classList.contains("report-subsection");
-      });
-      if (hasExistingSubsections) {
+    function wrapBody(body, headingLevel) {
+      var subsectionSelector = ":scope > details.report-subsection-level-" + String(headingLevel);
+      var hasExistingSubsections = toArray(body.querySelectorAll(subsectionSelector)).length > 0;
+      if (!hasExistingSubsections) {
+        var nodes = toArray(body.childNodes);
+        var fragment = document.createDocumentFragment();
+        var currentHeading = null;
+        var currentNodes = [];
+
+        function flushSubsection() {
+          if (!currentHeading) {
+            return;
+          }
+
+          var details = document.createElement("details");
+          details.className = "report-subsection report-subsection-level-" + String(headingLevel);
+          details.id = currentHeading.id || slugify(currentHeading.textContent) || "";
+
+          var summary = document.createElement("summary");
+          var title = document.createElement("span");
+          title.className = "report-subsection-title";
+          title.textContent = currentHeading.textContent;
+          summary.appendChild(title);
+          details.appendChild(summary);
+
+          var inner = document.createElement("div");
+          inner.className = "report-subsection-body report-subsection-body-level-" + String(headingLevel);
+          currentNodes.forEach(function (node) {
+            inner.appendChild(node);
+          });
+          details.appendChild(inner);
+          fragment.appendChild(details);
+
+          currentHeading = null;
+          currentNodes = [];
+        }
+
+        nodes.forEach(function (node) {
+          if (node.nodeType === 1 && node.tagName === "H" + String(headingLevel)) {
+            flushSubsection();
+            currentHeading = node;
+          } else if (currentHeading) {
+            currentNodes.push(node);
+          } else {
+            fragment.appendChild(node);
+          }
+        });
+
+        flushSubsection();
+
+        if (fragment.childNodes.length > 0) {
+          while (body.firstChild) {
+            body.removeChild(body.firstChild);
+          }
+          body.appendChild(fragment);
+        }
+      }
+
+      if (headingLevel >= 4) {
         return;
       }
 
-      var nodes = toArray(body.childNodes);
-      var fragment = document.createDocumentFragment();
-      var currentHeading = null;
-      var currentNodes = [];
-
-      function flushSubsection() {
-        if (!currentHeading) {
-          return;
-        }
-
-        var details = document.createElement("details");
-        details.className = "report-subsection";
-        details.id = currentHeading.id || slugify(currentHeading.textContent) || "";
-
-        var summary = document.createElement("summary");
-        var title = document.createElement("span");
-        title.className = "report-subsection-title";
-        title.textContent = currentHeading.textContent;
-        summary.appendChild(title);
-        details.appendChild(summary);
-
-        var inner = document.createElement("div");
-        inner.className = "report-subsection-body";
-        currentNodes.forEach(function (node) {
-          inner.appendChild(node);
-        });
-        details.appendChild(inner);
-        fragment.appendChild(details);
-
-        currentHeading = null;
-        currentNodes = [];
-      }
-
-      nodes.forEach(function (node) {
-        if (node.nodeType === 1 && node.tagName === "H2") {
-          flushSubsection();
-          currentHeading = node;
-        } else if (currentHeading) {
-          currentNodes.push(node);
-        } else {
-          fragment.appendChild(node);
-        }
+      toArray(body.querySelectorAll(":scope > details.report-subsection > .report-subsection-body")).forEach(function (childBody) {
+        wrapBody(childBody, headingLevel + 1);
       });
+    }
 
-      flushSubsection();
-
-      if (fragment.childNodes.length > 0) {
-        while (body.firstChild) {
-          body.removeChild(body.firstChild);
-        }
-        body.appendChild(fragment);
-      }
+    toArray(document.querySelectorAll("details.report-section > .report-section-body")).forEach(function (body) {
+      wrapBody(body, 2);
     });
   }
 
@@ -117,11 +135,7 @@
   function ensureIds() {
     getSections().forEach(function (section, index) {
       if (!section.id) {
-        var title = "";
-        var titleNode = section.querySelector(":scope > summary .report-section-title, :scope > summary .report-subsection-title");
-        if (titleNode) {
-          title = titleNode.textContent;
-        }
+        var title = getSectionTitleText(section) || "";
         section.id = slugify(title) || "section-" + (index + 1);
       }
     });
@@ -244,6 +258,34 @@
     navList.className = "report-nav-list";
     navWrap.appendChild(navList);
 
+    function appendNavLink(section, level, indexLabel) {
+      var titleTextValue = getSectionTitleText(section);
+      var link = document.createElement("a");
+      link.className = "report-nav-link level" + String(level);
+      link.href = "#" + section.id;
+      link.dataset.targetId = section.id;
+
+      var index = document.createElement("span");
+      index.className = "report-nav-index";
+      index.textContent = indexLabel;
+
+      var text = document.createElement("span");
+      text.textContent = titleTextValue;
+
+      link.appendChild(index);
+      link.appendChild(text);
+      navList.appendChild(link);
+    }
+
+    function appendSubsectionLinks(parentSection, parentIndexLabel, level) {
+      var childSections = toArray(parentSection.querySelectorAll(":scope > .report-section-body > details.report-subsection, :scope > .report-subsection-body > details.report-subsection"));
+      childSections.forEach(function (childSection, childIndex) {
+        var indexLabel = parentIndexLabel + "." + String(childIndex + 1);
+        appendNavLink(childSection, level, indexLabel);
+        appendSubsectionLinks(childSection, indexLabel, Math.min(level + 1, 4));
+      });
+    }
+
     topSections.forEach(function (section, sectionIndex) {
       var sectionTitle = section.querySelector(":scope > summary .report-section-title");
       var link = document.createElement("a");
@@ -261,25 +303,7 @@
       link.appendChild(index);
       link.appendChild(text);
       navList.appendChild(link);
-
-      toArray(section.querySelectorAll(":scope > .report-section-body > details.report-subsection")).forEach(function (subsection, subIndex) {
-        var subsectionTitle = subsection.querySelector(":scope > summary .report-subsection-title");
-        var subLink = document.createElement("a");
-        subLink.className = "report-nav-link level2";
-        subLink.href = "#" + subsection.id;
-        subLink.dataset.targetId = subsection.id;
-
-        var subIndexNode = document.createElement("span");
-        subIndexNode.className = "report-nav-index";
-        subIndexNode.textContent = String(sectionIndex + 1) + "." + String(subIndex + 1);
-
-        var subText = document.createElement("span");
-        subText.textContent = subsectionTitle ? subsectionTitle.textContent : subsection.id;
-
-        subLink.appendChild(subIndexNode);
-        subLink.appendChild(subText);
-        navList.appendChild(subLink);
-      });
+      appendSubsectionLinks(section, String(sectionIndex + 1), 2);
     });
 
     sidebar.appendChild(navWrap);

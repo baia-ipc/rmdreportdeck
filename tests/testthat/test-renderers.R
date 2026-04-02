@@ -46,6 +46,44 @@ make_mock_rmd <- function(path) {
   )
 }
 
+make_mock_data_uri_rmd <- function(path) {
+  writeLines(
+    c(
+      "---",
+      "title: \"P00 | Synthetic Data URI Report\"",
+      "output: html_document",
+      "---",
+      "",
+      "```{r setup, include=FALSE}",
+      "library(ggplot2)",
+      "library(rmdreportdeck)",
+      "df <- data.frame(group = c(\"A\", \"B\"), value = c(2, 5))",
+      "plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()",
+      "png_ref <- report_plot_png_data_uri(plot_obj, width = 6, height = 4)",
+      "pdf_ref <- report_plot_pdf_data_uri(plot_obj, width = 6, height = 4)",
+      "tsv_ref <- report_text_data_uri(report_tsv_text(df))",
+      "```",
+      "",
+      "# Figure",
+      "",
+      "```{r results='asis'}",
+      "cat(as.character(report_asset_bar(",
+      "  \"Downloads\",",
+      "  report_download_link(\"PNG\", \"figure.png\", png_ref),",
+      "  report_download_link(\"PDF\", \"figure.pdf\", pdf_ref),",
+      "  report_download_link(\"TSV\", \"table.tsv\", tsv_ref)",
+      ")))",
+      "```",
+      "",
+      "```{r}",
+      "print(plot_obj)",
+      "```"
+    ),
+    con = path,
+    useBytes = TRUE
+  )
+}
+
 make_mock_pdf_rmd <- function(path) {
   writeLines(
     c(
@@ -500,6 +538,30 @@ test_that("linked renderer creates .linked.html with file-backed assets and no d
   expect_match(runinfo_text, "Output of timing:")
 })
 
+test_that("data_uri helper code externalizes downloads in linked mode", {
+  skip_if_render_stack_missing()
+  skip_if_not_installed("ggplot2")
+
+  tmp_dir <- tempfile("rmdreportdeck-linked-data-uri-")
+  dir.create(tmp_dir, recursive = TRUE)
+  rmd_file <- file.path(tmp_dir, "report.Rmd")
+  make_mock_data_uri_rmd(rmd_file)
+
+  html_file <- render_html_report_linked_with_runinfo(rmd_file)
+  asset_dir <- file.path(tmp_dir, "report_files", "reportdeck")
+  html_text <- paste(readLines(html_file, warn = FALSE), collapse = "\n")
+
+  expect_true(file.exists(file.path(asset_dir, "figure.png")))
+  expect_true(file.exists(file.path(asset_dir, "figure.pdf")))
+  expect_true(file.exists(file.path(asset_dir, "table.tsv")))
+  expect_match(html_text, "report_files/reportdeck/figure.png", fixed = TRUE)
+  expect_match(html_text, "report_files/reportdeck/figure.pdf", fixed = TRUE)
+  expect_match(html_text, "report_files/reportdeck/table.tsv", fixed = TRUE)
+  expect_false(grepl("data:image/png;base64,", html_text, fixed = TRUE))
+  expect_false(grepl("data:application/pdf;base64,", html_text, fixed = TRUE))
+  expect_false(grepl("data:text/tab-separated-values", html_text, fixed = TRUE))
+})
+
 test_that("packhtml reuses .knit.md when fresh and params match", {
   skip_if_render_stack_missing()
   skip_if_not_installed("ggplot2")
@@ -530,6 +592,33 @@ test_that("packhtml reuses .knit.md when fresh and params match", {
 
   html_text <- paste(readLines(portable_file, warn = FALSE), collapse = "\n")
   expect_match(html_text, "data:image/png;base64,")
+
+  runinfo_text <- paste(readLines(runinfo_file, warn = FALSE), collapse = "\n")
+  expect_match(runinfo_text, "Knit reused: yes")
+  expect_match(runinfo_text, "Pack timing:")
+  expect_false(grepl("Knit timing:", runinfo_text, fixed = TRUE))
+})
+
+test_that("packhtml reuses .knit.md cleanly when params are empty", {
+  skip_if_render_stack_missing()
+  skip_if_not_installed("ggplot2")
+
+  tmp_dir <- tempfile("rmdreportdeck-packhtml-empty-params-")
+  dir.create(tmp_dir, recursive = TRUE)
+  rmd_file <- file.path(tmp_dir, "report.Rmd")
+  make_mock_data_uri_rmd(rmd_file)
+
+  render_html_report_linked_with_runinfo(rmd_file, params = list())
+  knit_md_file <- file.path(tmp_dir, "report.knit.md")
+  linked_mtime <- file.info(knit_md_file)$mtime
+
+  Sys.sleep(0.2)
+
+  portable_file <- render_html_report_portable_with_runinfo(rmd_file, params = list())
+  runinfo_file <- sub("\\.portable\\.html$", ".portable.runinfo", portable_file)
+
+  expect_true(file.exists(portable_file))
+  expect_equal(linked_mtime, file.info(knit_md_file)$mtime)
 
   runinfo_text <- paste(readLines(runinfo_file, warn = FALSE), collapse = "\n")
   expect_match(runinfo_text, "Knit reused: yes")

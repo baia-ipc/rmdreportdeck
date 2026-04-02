@@ -180,7 +180,18 @@ knit_md_is_valid <- function(rmd_path, knit_md_path, knit_meta_path, params) {
   if (is.na(stored_mtime) || rmd_mtime > stored_mtime) {
     return(FALSE)
   }
-  norm <- function(p) p[order(names(p))]
+  norm <- function(p) {
+    if (length(p) == 0) {
+      return(list())
+    }
+    p <- lapply(p, as.character)
+    nms <- names(p)
+    if (is.null(nms)) {
+      nms <- rep("", length(p))
+    }
+    names(p) <- nms
+    p[order(names(p))]
+  }
   if (!identical(norm(lapply(meta$params, as.character)), norm(lapply(params, as.character)))) {
     return(FALSE)
   }
