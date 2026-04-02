@@ -941,9 +941,9 @@ test_that("packhtml CLI produces .portable.html", {
   expect_true(file.exists(file.path(tmp_dir, "report.linked.html")))
 })
 
-# --- Unit test for reportdeck_setup_linked ---
+# --- Unit test for reportdeck_setup ---
 
-test_that("reportdeck_setup_linked sets cache options based on output.file", {
+test_that("reportdeck_setup sets cache options based on output.file", {
   testthat::skip_if_not_installed("knitr")
 
   tmp_dir  <- tempfile("rmdreportdeck-setup-linked-")
@@ -958,10 +958,35 @@ test_that("reportdeck_setup_linked sets cache options based on output.file", {
   }, add = TRUE)
 
   knitr::opts_knit$set(output.file = fake_output)
-  cache_path <- reportdeck_setup_linked()
+  cache_path <- reportdeck_setup()
 
   expect_match(cache_path, ".knitr-cache/report/", fixed = TRUE)
   expect_match(cache_path, tmp_dir, fixed = TRUE)
   expect_true(isTRUE(knitr::opts_chunk$get("cache")))
   expect_identical(knitr::opts_chunk$get("cache.path"), cache_path)
+  expect_type(knitr::opts_hooks$get("cache"), "closure")
+})
+
+test_that("reportdeck_setup disables caching for input-loading chunks", {
+  testthat::skip_if_not_installed("knitr")
+
+  tmp_dir <- tempfile("rmdreportdeck-cache-hook-")
+  dir.create(tmp_dir, recursive = TRUE)
+  fake_output <- file.path(tmp_dir, "report.linked.html")
+
+  old_output <- knitr::opts_knit$get("output.file")
+  old_cache_hook <- knitr::opts_hooks$get("cache")
+  on.exit({
+    knitr::opts_knit$set(output.file = old_output)
+    knitr::opts_hooks$set(cache = old_cache_hook)
+  }, add = TRUE)
+
+  knitr::opts_knit$set(output.file = fake_output)
+  reportdeck_setup()
+
+  hook <- knitr::opts_hooks$get("cache")
+  expect_false(hook(list(label = "load_input_data", cache = TRUE))$cache)
+  expect_false(hook(list(label = "load-data", cache = TRUE))$cache)
+  expect_true(hook(list(label = "results", cache = TRUE))$cache)
+  expect_true(hook(list(label = "load_input_data", cache = FALSE))$cache == FALSE)
 })

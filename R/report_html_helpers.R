@@ -443,7 +443,7 @@ report_bundle_asset_bar <- function(
   )
 }
 
-reportdeck_setup_linked <- function(extra_cache_deps = list()) {
+reportdeck_setup <- function(extra_cache_deps = list()) {
   reportdeck_require_knitr()
   output_file <- knitr::opts_knit$get("output.file")
   if (is.null(output_file)) {
@@ -457,13 +457,32 @@ reportdeck_setup_linked <- function(extra_cache_deps = list()) {
     cache.path = cache_path,
     cache.extra = c(list(knitr::current_input()), extra_cache_deps)
   )
+  knitr::opts_hooks$set(cache = reportdeck_chunk_cache_hook)
   invisible(cache_path)
+}
+
+reportdeck_setup_linked <- function(extra_cache_deps = list()) {
+  reportdeck_setup(extra_cache_deps = extra_cache_deps)
 }
 
 reportdeck_require_knitr <- function() {
   if (!requireNamespace("knitr", quietly = TRUE)) {
     stop("The 'knitr' package is required for this helper.", call. = FALSE)
   }
+}
+
+reportdeck_is_input_chunk_label <- function(label) {
+  if (is.null(label) || !length(label) || !nzchar(label[[1]])) {
+    return(FALSE)
+  }
+  grepl("^load($|[_-])", label[[1]], perl = TRUE)
+}
+
+reportdeck_chunk_cache_hook <- function(options) {
+  if (isTRUE(options$cache) && reportdeck_is_input_chunk_label(options$label)) {
+    options$cache <- FALSE
+  }
+  options
 }
 
 reportdeck_slugify <- function(text) {

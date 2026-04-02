@@ -202,6 +202,14 @@ render_html_report <- function(input, params = list(), output_file = NULL, envir
   rmd_file <- absolute_cli_path(input)
   assets <- report_asset_paths()
   final_output <- resolve_expected_output_path(rmd_file, output_file, ".html")
+  old_chunk_opts <- knitr::opts_chunk$get()
+  old_output_file <- knitr::opts_knit$get("output.file")
+  on.exit({
+    do.call(knitr::opts_chunk$set, old_chunk_opts)
+    knitr::opts_knit$set(output.file = old_output_file)
+  }, add = TRUE)
+  knitr::opts_knit$set(output.file = final_output)
+  reportdeck_setup(extra_cache_deps = list(params, report_mode = "html"))
 
   rmarkdown::render(
     input = rmd_file,
@@ -226,13 +234,19 @@ render_html_report_linked <- function(input, params = list(), output_file = NULL
   output_dir <- dirname(final_output)
   report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(final_output)))
   asset_dir <- file.path(output_dir, paste0(report_stem, "_files"), "reportdeck")
+  old_chunk_opts <- knitr::opts_chunk$get()
+  old_output_file <- knitr::opts_knit$get("output.file")
 
   options(rmdreportdeck.render_mode = "linked")
   options(rmdreportdeck.asset_dir = asset_dir)
   on.exit({
+    do.call(knitr::opts_chunk$set, old_chunk_opts)
+    knitr::opts_knit$set(output.file = old_output_file)
     options(rmdreportdeck.render_mode = NULL)
     options(rmdreportdeck.asset_dir = NULL)
   }, add = TRUE)
+  knitr::opts_knit$set(output.file = final_output)
+  reportdeck_setup(extra_cache_deps = list(params, report_mode = "linked"))
 
   rmarkdown::render(
     input = rmd_file,
@@ -256,6 +270,14 @@ render_html_report_linked <- function(input, params = list(), output_file = NULL
 render_pdf_report <- function(input, params = list(), output_file = NULL, envir = new.env(parent = globalenv())) {
   rmd_file <- absolute_cli_path(input)
   final_output <- resolve_expected_output_path(rmd_file, output_file, ".pdf")
+  old_chunk_opts <- knitr::opts_chunk$get()
+  old_output_file <- knitr::opts_knit$get("output.file")
+  on.exit({
+    do.call(knitr::opts_chunk$set, old_chunk_opts)
+    knitr::opts_knit$set(output.file = old_output_file)
+  }, add = TRUE)
+  knitr::opts_knit$set(output.file = final_output)
+  reportdeck_setup(extra_cache_deps = list(params, report_mode = "pdf"))
 
   rmarkdown::render(
     input = rmd_file,
@@ -353,14 +375,25 @@ render_html_report_with_runinfo <- function(input, params = list(), output_file 
 render_html_report_linked_with_runinfo <- function(input, params = list(), output_file = NULL, command = NULL) {
   rmd_file <- absolute_cli_path(input)
   expected_output <- resolve_expected_output_path(input, output_file, ".linked.html")
+  output_dir <- dirname(expected_output)
+  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(expected_output)))
+  knit_md_path <- file.path(output_dir, paste0(report_stem, ".knit.md"))
+  knit_meta_path <- file.path(output_dir, paste0(report_stem, ".knit.meta"))
+  assets <- report_asset_paths()
+  knit_reused <- knit_md_is_valid(rmd_file, knit_md_path, knit_meta_path, params)
+  knit_timing <- NULL
+
   timing <- system.time({
-    rendered <- render_html_report_linked(input = input, params = params, output_file = output_file)
+    if (isTRUE(knit_reused)) {
+      rendered <- render_linked_from_knit_md(knit_md_path, expected_output, assets)
+    } else {
+      knit_timing <<- system.time({
+        rendered <- render_html_report_linked(input = input, params = params, output_file = output_file)
+      })
+    }
   })
   final_output <- relocate_rendered_output(rendered, expected_output)
 
-  output_dir <- dirname(final_output)
-  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(final_output)))
-  knit_meta_path <- file.path(output_dir, paste0(report_stem, ".knit.meta"))
   write_knit_meta(rmd_file, params, knit_meta_path)
 
   write_runinfo(
@@ -368,7 +401,9 @@ render_html_report_linked_with_runinfo <- function(input, params = list(), outpu
     command = command,
     renderer = "rmdreportdeck::render_html_report_linked",
     params = params,
-    timing = timing
+    timing = timing,
+    knit_reused = knit_reused,
+    knit_timing = knit_timing
   )
   invisible(final_output)
 }
@@ -399,6 +434,39 @@ pack_from_knit_md <- function(knit_md_path, output_file, assets) {
     output_file = output_file,
     output_options = list(
       self_contained = TRUE,
+      pandoc_args = c(
+        "--lua-filter", assets$lua_filter,
+        "--include-in-header", assets$header_html,
+        "--include-after-body", assets$footer_html
+      )
+    )
+  )
+}
+
+render_linked_from_knit_md <- function(knit_md_path, output_file, assets) {
+  tmp_md <- sub("\\.knit\\.md$", "_linked_build.md", knit_md_path)
+  file.copy(knit_md_path, tmp_md, overwrite = TRUE)
+  on.exit(unlink(tmp_md), add = TRUE)
+
+  output_dir <- dirname(output_file)
+  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(output_file)))
+  asset_dir <- file.path(output_dir, paste0(report_stem, "_files"), "reportdeck")
+
+  options(rmdreportdeck.render_mode = "linked")
+  options(rmdreportdeck.asset_dir = asset_dir)
+  on.exit({
+    options(rmdreportdeck.render_mode = NULL)
+    options(rmdreportdeck.asset_dir = NULL)
+  }, add = TRUE)
+
+  rmarkdown::render(
+    input = tmp_md,
+    output_format = "html_document",
+    output_file = output_file,
+    intermediates_dir = output_dir,
+    clean = FALSE,
+    output_options = list(
+      self_contained = FALSE,
       pandoc_args = c(
         "--lua-filter", assets$lua_filter,
         "--include-in-header", assets$header_html,
