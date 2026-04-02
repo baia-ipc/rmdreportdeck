@@ -135,6 +135,58 @@ relocate_rendered_output <- function(rendered, expected_output) {
   expected_path
 }
 
+reportdeck_is_linked_mode <- function() {
+  identical(getOption("rmdreportdeck.render_mode", default = "portable"), "linked")
+}
+
+write_knit_meta <- function(rmd_path, params, knit_meta_path) {
+  mtime <- as.integer(file.info(rmd_path)$mtime)
+  lines <- c(paste0("rmd_mtime=", mtime))
+  if (length(params) > 0) {
+    lines <- c(lines, paste0("param.", names(params), "=", unlist(params, use.names = FALSE)))
+  }
+  writeLines(lines, con = knit_meta_path, useBytes = TRUE)
+  invisible(knit_meta_path)
+}
+
+read_knit_meta <- function(knit_meta_path) {
+  if (!file.exists(knit_meta_path)) {
+    return(NULL)
+  }
+  lines <- readLines(knit_meta_path, warn = FALSE)
+  kv <- list()
+  for (line in lines) {
+    eq <- regexpr("=", line, fixed = TRUE)[[1]]
+    if (eq < 1) next
+    kv[[substr(line, 1, eq - 1)]] <- substr(line, eq + 1, nchar(line))
+  }
+  params <- list()
+  for (k in grep("^param\\.", names(kv), value = TRUE)) {
+    params[[sub("^param\\.", "", k)]] <- kv[[k]]
+  }
+  list(rmd_mtime = kv[["rmd_mtime"]], params = params)
+}
+
+knit_md_is_valid <- function(rmd_path, knit_md_path, knit_meta_path, params) {
+  if (!file.exists(knit_md_path)) {
+    return(FALSE)
+  }
+  meta <- read_knit_meta(knit_meta_path)
+  if (is.null(meta) || is.null(meta$rmd_mtime)) {
+    return(FALSE)
+  }
+  rmd_mtime <- as.integer(file.info(rmd_path)$mtime)
+  stored_mtime <- suppressWarnings(as.integer(meta$rmd_mtime))
+  if (is.na(stored_mtime) || rmd_mtime > stored_mtime) {
+    return(FALSE)
+  }
+  norm <- function(p) p[order(names(p))]
+  if (!identical(norm(lapply(meta$params, as.character)), norm(lapply(params, as.character)))) {
+    return(FALSE)
+  }
+  TRUE
+}
+
 render_html_report <- function(input, params = list(), output_file = NULL, envir = new.env(parent = globalenv())) {
   rmd_file <- absolute_cli_path(input)
   assets <- report_asset_paths()
@@ -146,6 +198,40 @@ render_html_report <- function(input, params = list(), output_file = NULL, envir
     params = params,
     output_file = final_output,
     output_options = list(
+      pandoc_args = c(
+        "--lua-filter", assets$lua_filter,
+        "--include-in-header", assets$header_html,
+        "--include-after-body", assets$footer_html
+      )
+    ),
+    envir = envir
+  )
+}
+
+render_html_report_linked <- function(input, params = list(), output_file = NULL, envir = new.env(parent = globalenv())) {
+  rmd_file <- absolute_cli_path(input)
+  assets <- report_asset_paths()
+  final_output <- resolve_expected_output_path(rmd_file, output_file, ".linked.html")
+  output_dir <- dirname(final_output)
+  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(final_output)))
+  asset_dir <- file.path(output_dir, paste0(report_stem, "_files"), "reportdeck")
+
+  options(rmdreportdeck.render_mode = "linked")
+  options(rmdreportdeck.asset_dir = asset_dir)
+  on.exit({
+    options(rmdreportdeck.render_mode = NULL)
+    options(rmdreportdeck.asset_dir = NULL)
+  }, add = TRUE)
+
+  rmarkdown::render(
+    input = rmd_file,
+    output_format = "html_document",
+    params = params,
+    output_file = final_output,
+    intermediates_dir = output_dir,
+    clean = FALSE,
+    output_options = list(
+      self_contained = FALSE,
       pandoc_args = c(
         "--lua-filter", assets$lua_filter,
         "--include-in-header", assets$header_html,
@@ -169,7 +255,8 @@ render_pdf_report <- function(input, params = list(), output_file = NULL, envir 
   )
 }
 
-write_runinfo <- function(output_report, command = NULL, renderer = NULL, params = list(), timing = NULL) {
+write_runinfo <- function(output_report, command = NULL, renderer = NULL, params = list(),
+                          timing = NULL, knit_reused = NULL, knit_timing = NULL) {
   report_path <- normalize_report_path(output_report)
   runinfo_path <- sub("\\.[^.]+$", ".runinfo", report_path)
   report_dir <- dirname(report_path)
@@ -188,9 +275,28 @@ write_runinfo <- function(output_report, command = NULL, renderer = NULL, params
     paste("Absolute path of Rscript:", normalize_report_path(rscript_path)),
     paste("Rscript version:", paste(R.version$major, R.version$minor, sep = ".")),
     paste("Parameters:", paste(sprintf("%s=%s", names(params), unlist(params, use.names = FALSE)), collapse = " ")),
-    "",
-    "# Resources used",
-    "Output of timing:",
+    ""
+  )
+
+  if (!is.null(knit_reused)) {
+    lines <- c(
+      lines,
+      "# Knit reuse",
+      paste("Knit reused:", if (isTRUE(knit_reused)) "yes" else "no"),
+      ""
+    )
+  }
+
+  lines <- c(lines, "# Resources used")
+
+  if (!is.null(knit_timing)) {
+    lines <- c(lines, "Knit timing:", format_timing_block(knit_timing), "")
+  }
+
+  pack_label <- if (!is.null(knit_timing) || !is.null(knit_reused)) "Pack timing:" else "Output of timing:"
+  lines <- c(
+    lines,
+    pack_label,
     format_timing_block(timing),
     "",
     "# System information",
@@ -233,6 +339,29 @@ render_html_report_with_runinfo <- function(input, params = list(), output_file 
   invisible(final_output)
 }
 
+render_html_report_linked_with_runinfo <- function(input, params = list(), output_file = NULL, command = NULL) {
+  rmd_file <- absolute_cli_path(input)
+  expected_output <- resolve_expected_output_path(input, output_file, ".linked.html")
+  timing <- system.time({
+    rendered <- render_html_report_linked(input = input, params = params, output_file = output_file)
+  })
+  final_output <- relocate_rendered_output(rendered, expected_output)
+
+  output_dir <- dirname(final_output)
+  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(final_output)))
+  knit_meta_path <- file.path(output_dir, paste0(report_stem, ".knit.meta"))
+  write_knit_meta(rmd_file, params, knit_meta_path)
+
+  write_runinfo(
+    output_report = final_output,
+    command = command,
+    renderer = "rmdreportdeck::render_html_report_linked",
+    params = params,
+    timing = timing
+  )
+  invisible(final_output)
+}
+
 render_pdf_report_with_runinfo <- function(input, params = list(), output_file = NULL, command = NULL) {
   expected_output <- resolve_expected_output_path(input, output_file, ".pdf")
   timing <- system.time({
@@ -245,6 +374,60 @@ render_pdf_report_with_runinfo <- function(input, params = list(), output_file =
     renderer = "rmdreportdeck::render_pdf_report",
     params = params,
     timing = timing
+  )
+  invisible(final_output)
+}
+
+pack_from_knit_md <- function(knit_md_path, output_file, assets) {
+  tmp_md <- sub("\\.knit\\.md$", "_pack_build.md", knit_md_path)
+  file.copy(knit_md_path, tmp_md, overwrite = TRUE)
+  on.exit(unlink(tmp_md), add = TRUE)
+  rmarkdown::render(
+    input = tmp_md,
+    output_format = "html_document",
+    output_file = output_file,
+    output_options = list(
+      self_contained = TRUE,
+      pandoc_args = c(
+        "--lua-filter", assets$lua_filter,
+        "--include-in-header", assets$header_html,
+        "--include-after-body", assets$footer_html
+      )
+    )
+  )
+}
+
+render_html_report_portable_with_runinfo <- function(input, params = list(), output_file = NULL, command = NULL) {
+  rmd_file <- absolute_cli_path(input)
+  expected_output <- resolve_expected_output_path(rmd_file, output_file, ".portable.html")
+  output_dir <- dirname(expected_output)
+  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(expected_output)))
+  knit_md_path <- file.path(output_dir, paste0(report_stem, ".knit.md"))
+  knit_meta_path <- file.path(output_dir, paste0(report_stem, ".knit.meta"))
+  assets <- report_asset_paths()
+
+  knit_reused <- knit_md_is_valid(rmd_file, knit_md_path, knit_meta_path, params)
+
+  knit_timing <- NULL
+  if (!knit_reused) {
+    knit_timing <- system.time({
+      render_html_report_linked_with_runinfo(input = rmd_file, params = params, command = command)
+    })
+  }
+
+  pack_timing <- system.time({
+    packed <- pack_from_knit_md(knit_md_path, expected_output, assets)
+  })
+  final_output <- relocate_rendered_output(packed, expected_output)
+
+  write_runinfo(
+    output_report = final_output,
+    command = command,
+    renderer = "rmdreportdeck::render_html_report_portable",
+    params = params,
+    timing = pack_timing,
+    knit_reused = knit_reused,
+    knit_timing = knit_timing
   )
   invisible(final_output)
 }
@@ -266,7 +449,7 @@ run_cli <- function(args, format) {
   command_path <- Sys.getenv("REPORTDECK_COMMAND_PATH", unset = NA_character_)
 
   if (identical(format, "html")) {
-    render_html_report_with_runinfo(
+    render_html_report_linked_with_runinfo(
       input = rmd_file,
       params = params,
       command = command_path
@@ -288,4 +471,22 @@ knit2html_cli <- function(args = commandArgs(trailingOnly = TRUE)) {
 
 knit2pdf_cli <- function(args = commandArgs(trailingOnly = TRUE)) {
   run_cli(args = args, format = "pdf")
+}
+
+packhtml_cli <- function(args = commandArgs(trailingOnly = TRUE)) {
+  if (length(args) < 1) {
+    stop("Usage: packhtml <Rmdfile> [param1=value1] [param2=value2] ...", call. = FALSE)
+  }
+  rmd_file <- args[[1]]
+  if (!file.exists(rmd_file)) {
+    stop("File does not exist: ", rmd_file, call. = FALSE)
+  }
+  params <- parse_cli_params(args[-1])
+  command_path <- Sys.getenv("REPORTDECK_COMMAND_PATH", unset = NA_character_)
+  render_html_report_portable_with_runinfo(
+    input = rmd_file,
+    params = params,
+    command = command_path
+  )
+  invisible(NULL)
 }

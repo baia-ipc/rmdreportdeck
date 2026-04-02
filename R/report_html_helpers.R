@@ -87,6 +87,16 @@ report_download_link <- function(label, filename, href) {
 }
 
 report_tsv_download_link <- function(df, filename, label = "Download TSV") {
+  if (reportdeck_is_linked_mode()) {
+    asset_dir <- getOption("rmdreportdeck.asset_dir")
+    if (!is.null(asset_dir)) {
+      dir.create(asset_dir, recursive = TRUE, showWarnings = FALSE)
+      utils::write.table(df, file.path(asset_dir, filename),
+        sep = "\t", quote = FALSE, row.names = FALSE, na = "")
+      href <- file.path(basename(dirname(asset_dir)), basename(asset_dir), filename)
+      return(report_download_link(label = label, filename = filename, href = href))
+    }
+  }
   report_download_link(
     label = label,
     filename = filename,
@@ -157,13 +167,6 @@ report_plot_bundle <- function(
     stop("'block_prefix' must be a single non-empty character string.", call. = FALSE)
   }
 
-  if (!is.null(plot_dir)) {
-    dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
-  }
-  if (!is.null(data_dir) && !is.null(data)) {
-    dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
-  }
-
   plot_stem <- report_figure_name(block_prefix, suffix = suffix, descriptor = descriptor)
   table_stem <- report_table_name(block_prefix, suffix = suffix, descriptor = descriptor)
 
@@ -174,32 +177,97 @@ report_plot_bundle <- function(
     tsv = if (!is.null(data)) paste0(table_stem, ".tsv") else NULL
   )
 
+  if (reportdeck_is_linked_mode()) {
+    asset_dir <- getOption("rmdreportdeck.asset_dir")
+    if (!is.null(asset_dir)) {
+      # Always write to asset_dir so HTML hrefs are always valid
+      dir.create(asset_dir, recursive = TRUE, showWarnings = FALSE)
+      reportdeck_write_plot_png(plot_obj, file.path(asset_dir, file_names$png),
+        width = width, height = height, res = res)
+      if (isTRUE(save_pdf)) {
+        reportdeck_write_plot_pdf(plot_obj, file.path(asset_dir, file_names$pdf),
+          width = width, height = height)
+      }
+      if (isTRUE(save_svg)) {
+        reportdeck_write_plot_svg(plot_obj, file.path(asset_dir, file_names$svg),
+          width = width, height = height)
+      }
+      if (!is.null(data)) {
+        utils::write.table(data, file.path(asset_dir, file_names$tsv),
+          sep = "\t", quote = FALSE, row.names = FALSE, na = "")
+      }
+
+      # Also write archival copies to explicit dirs if given and different from asset_dir
+      norm_asset <- normalizePath(asset_dir, mustWork = FALSE)
+      if (!is.null(plot_dir) && !identical(normalizePath(plot_dir, mustWork = FALSE), norm_asset)) {
+        dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+        reportdeck_write_plot_png(plot_obj, file.path(plot_dir, file_names$png),
+          width = width, height = height, res = res)
+        if (isTRUE(save_pdf)) {
+          reportdeck_write_plot_pdf(plot_obj, file.path(plot_dir, file_names$pdf),
+            width = width, height = height)
+        }
+        if (isTRUE(save_svg)) {
+          reportdeck_write_plot_svg(plot_obj, file.path(plot_dir, file_names$svg),
+            width = width, height = height)
+        }
+      }
+      if (!is.null(data_dir) && !is.null(data) &&
+          !identical(normalizePath(data_dir, mustWork = FALSE), norm_asset)) {
+        dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
+        utils::write.table(data, file.path(data_dir, file_names$tsv),
+          sep = "\t", quote = FALSE, row.names = FALSE, na = "")
+      }
+
+      asset_rel <- file.path(basename(dirname(asset_dir)), basename(asset_dir))
+      png_href  <- file.path(asset_rel, file_names$png)
+      pdf_href  <- if (isTRUE(save_pdf)) file.path(asset_rel, file_names$pdf) else NULL
+      data_href <- if (!is.null(data)) file.path(asset_rel, file_names$tsv) else NULL
+
+      return(structure(
+        list(
+          stem = plot_stem,
+          block_prefix = block_prefix,
+          suffix = suffix,
+          descriptor = descriptor,
+          plot_obj = plot_obj,
+          data = data,
+          width = width,
+          height = height,
+          res = res,
+          file_names = file_names,
+          png_uri = NULL, pdf_uri = NULL, data_uri = NULL,
+          png_href = png_href, pdf_href = pdf_href, data_href = data_href
+        ),
+        class = "reportdeck_plot_bundle"
+      ))
+    }
+  }
+
+  # Portable mode: write explicit dirs, generate data URIs
+  if (!is.null(plot_dir)) {
+    dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+  if (!is.null(data_dir) && !is.null(data)) {
+    dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
   if (!is.null(plot_dir) && isTRUE(save_pdf)) {
-    reportdeck_write_plot_pdf(
-      plot_obj,
-      file.path(plot_dir, file_names$pdf),
-      width = width,
-      height = height
-    )
+    reportdeck_write_plot_pdf(plot_obj, file.path(plot_dir, file_names$pdf),
+      width = width, height = height)
   }
   if (!is.null(plot_dir) && isTRUE(save_svg)) {
-    reportdeck_write_plot_svg(
-      plot_obj,
-      file.path(plot_dir, file_names$svg),
-      width = width,
-      height = height
-    )
+    reportdeck_write_plot_svg(plot_obj, file.path(plot_dir, file_names$svg),
+      width = width, height = height)
   }
   if (!is.null(data) && !is.null(data_dir)) {
-    utils::write.table(
-      data,
-      file.path(data_dir, file_names$tsv),
-      sep = "\t",
-      quote = FALSE,
-      row.names = FALSE,
-      na = ""
-    )
+    utils::write.table(data, file.path(data_dir, file_names$tsv),
+      sep = "\t", quote = FALSE, row.names = FALSE, na = "")
   }
+
+  png_uri  <- report_plot_png_data_uri(plot_obj, width = width, height = height, res = res)
+  pdf_uri  <- if (isTRUE(save_pdf)) report_plot_pdf_data_uri(plot_obj, width = width, height = height) else NULL
+  data_uri <- if (!is.null(data)) report_text_data_uri(report_tsv_text(data)) else NULL
 
   structure(
     list(
@@ -213,9 +281,8 @@ report_plot_bundle <- function(
       height = height,
       res = res,
       file_names = file_names,
-      png_uri = report_plot_png_data_uri(plot_obj, width = width, height = height, res = res),
-      pdf_uri = if (isTRUE(save_pdf)) report_plot_pdf_data_uri(plot_obj, width = width, height = height) else NULL,
-      data_uri = if (!is.null(data)) report_text_data_uri(report_tsv_text(data)) else NULL
+      png_uri = png_uri, pdf_uri = pdf_uri, data_uri = data_uri,
+      png_href = png_uri, pdf_href = pdf_uri, data_href = data_uri
     ),
     class = "reportdeck_plot_bundle"
   )
@@ -231,26 +298,20 @@ report_bundle_download_links <- function(
     stop("'bundle' must be created by report_plot_bundle().", call. = FALSE)
   }
 
+  png_href  <- bundle$png_href  %||% bundle$png_uri
+  pdf_href  <- bundle$pdf_href  %||% bundle$pdf_uri
+  data_href <- bundle$data_href %||% bundle$data_uri
+
   links <- list(
-    report_download_link(
-      png_label,
-      bundle$file_names$png,
-      bundle$png_uri
-    )
+    report_download_link(png_label, bundle$file_names$png, png_href)
   )
 
-  if (!is.null(bundle$pdf_uri) && !is.null(bundle$file_names$pdf)) {
-    links <- c(
-      links,
-      list(report_download_link(pdf_label, bundle$file_names$pdf, bundle$pdf_uri))
-    )
+  if (!is.null(pdf_href) && !is.null(bundle$file_names$pdf)) {
+    links <- c(links, list(report_download_link(pdf_label, bundle$file_names$pdf, pdf_href)))
   }
 
-  if (!is.null(tsv_label) && !is.null(bundle$data_uri) && !is.null(bundle$file_names$tsv)) {
-    links <- c(
-      links,
-      list(report_download_link(tsv_label, bundle$file_names$tsv, bundle$data_uri))
-    )
+  if (!is.null(tsv_label) && !is.null(data_href) && !is.null(bundle$file_names$tsv)) {
+    links <- c(links, list(report_download_link(tsv_label, bundle$file_names$tsv, data_href)))
   }
 
   links
@@ -281,6 +342,23 @@ report_bundle_asset_bar <- function(
       list(note = note)
     )
   )
+}
+
+reportdeck_setup_linked <- function(extra_cache_deps = list()) {
+  reportdeck_require_knitr()
+  output_file <- knitr::opts_knit$get("output.file")
+  if (is.null(output_file)) {
+    output_file <- file.path(getwd(), "report.linked.html")
+  }
+  output_dir <- dirname(output_file)
+  report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(output_file)))
+  cache_path <- file.path(output_dir, ".knitr-cache", report_stem, "")
+  knitr::opts_chunk$set(
+    cache = TRUE,
+    cache.path = cache_path,
+    cache.extra = c(list(knitr::current_input()), extra_cache_deps)
+  )
+  invisible(cache_path)
 }
 
 reportdeck_require_knitr <- function() {
@@ -323,8 +401,24 @@ reportdeck_unique_ids <- function(ids) {
   unique_ids
 }
 
-render_reportdeck_item_content_html <- function(content) {
+render_reportdeck_item_content_html <- function(content, prefix = NULL) {
   if (inherits(content, "reportdeck_item_plot")) {
+    if (reportdeck_is_linked_mode()) {
+      asset_dir <- getOption("rmdreportdeck.asset_dir")
+      if (!is.null(asset_dir)) {
+        dir.create(asset_dir, recursive = TRUE, showWarnings = FALSE)
+        png_stem <- if (!is.null(prefix)) paste0("plot-", prefix) else paste0("plot-", format(Sys.time(), "%H%M%OS6"))
+        png_filename <- paste0(png_stem, ".png")
+        reportdeck_write_plot_png(content$plot_obj, file.path(asset_dir, png_filename),
+          width = content$width, height = content$height, res = content$res)
+        img_src <- file.path(basename(dirname(asset_dir)), basename(asset_dir), png_filename)
+        return(htmltools::tags$div(
+          class = "report-item-plot-card report-plot-card",
+          do.call(htmltools::tags$img,
+            c(list(src = img_src, alt = "", class = "report-item-plot-image"), content$img_attrs))
+        ))
+      }
+    }
     png_uri <- report_plot_png_data_uri(
       content$plot_obj,
       width = content$width,
@@ -451,7 +545,9 @@ render_reportdeck_item_panel_html <- function(panel, panel_id, open = FALSE) {
     body_children <- c(body_children, list(htmltools::tags$p(panel$note, class = "report-item-note")))
   }
   if (length(panel$body) > 0) {
-    rendered <- lapply(panel$body, render_reportdeck_item_content_html)
+    rendered <- lapply(seq_along(panel$body), function(i) {
+      render_reportdeck_item_content_html(panel$body[[i]], prefix = paste0(panel_id, "-", i))
+    })
     body_children <- c(body_children, rendered)
   }
 
