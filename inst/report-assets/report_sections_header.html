@@ -568,6 +568,15 @@ details.report-subsection-level-4 > .report-subsection-body {
   gap: 0.9rem;
 }
 
+.report-loop-section-level-2 {
+  margin-top: 0.25rem;
+}
+
+.report-loop-section-level-3 {
+  margin-top: 0.2rem;
+  padding-left: 0.35rem;
+}
+
 details.report-item-panel {
   border: 1px solid var(--report-border);
   border-radius: var(--report-radius-md);
@@ -589,6 +598,26 @@ details.report-item-panel > summary {
   list-style: none;
   padding: 0.8rem 0.95rem;
   background: linear-gradient(180deg, rgba(47, 111, 221, 0.04), rgba(255, 255, 255, 0.92));
+}
+
+details.report-item-panel-level-2 {
+  background: linear-gradient(180deg, #ffffff, #f7fbff);
+}
+
+details.report-item-panel-level-2 > summary {
+  background: linear-gradient(180deg, rgba(47, 111, 221, 0.06), rgba(255, 255, 255, 0.95));
+}
+
+details.report-item-panel-level-3 {
+  margin-left: 0.3rem;
+  border-color: #dbe5f0;
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  box-shadow: none;
+}
+
+details.report-item-panel-level-3 > summary {
+  padding: 0.72rem 0.85rem;
+  background: linear-gradient(180deg, rgba(47, 111, 221, 0.035), rgba(255, 255, 255, 0.98));
 }
 
 details.report-item-panel > summary::-webkit-details-marker {
@@ -627,8 +656,17 @@ details.report-item-panel > summary:focus {
   color: #193349;
 }
 
+details.report-item-panel-level-3 .report-item-panel-title {
+  font-size: 1rem;
+  font-weight: 620;
+}
+
 .report-item-panel-body {
   padding: 0.95rem;
+}
+
+details.report-item-panel-level-3 > .report-item-panel-body {
+  padding: 0.8rem 0.85rem 0.85rem;
 }
 
 .report-item-panel-body > :first-child {

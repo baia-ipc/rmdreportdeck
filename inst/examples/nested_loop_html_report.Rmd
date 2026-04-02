@@ -1,0 +1,76 @@
+---
+title: "P00 | Nested Loop HTML Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(rmdreportdeck)
+
+pairs <- c("CIP vs SST", "E vs CIN")
+cell_types <- c("Total", "Naive CD4 T cells (I)")
+plot_types <- c("GO ORA barplot", "GO ORA dotplot")
+```
+
+# Goal
+
+This example exercises nested `report_loop_section()` blocks for both repeated cell-type panels and repeated plot-type panels.
+
+```{r results='asis', echo=FALSE}
+for (pair_idx in seq_along(pairs)) {
+  pair <- pairs[[pair_idx]]
+  cat(paste0("\n# ", pair, "\n\n"))
+
+  cell_items <- vector("list", length(cell_types))
+
+  for (ct_idx in seq_along(cell_types)) {
+    ct <- cell_types[[ct_idx]]
+    plot_items <- vector("list", length(plot_types))
+
+    for (plot_idx in seq_along(plot_types)) {
+      plot_type <- plot_types[[plot_idx]]
+      df <- data.frame(
+        sample = c("A", "B"),
+        value = c(plot_idx + ct_idx, plot_idx + pair_idx + 1)
+      )
+      plot_obj <- ggplot(df, aes(sample, value, fill = sample)) +
+        geom_col(show.legend = FALSE)
+
+      plot_items[[plot_idx]] <- report_item_panel(
+        title = plot_type,
+        id = paste("plot", pair_idx, ct_idx, plot_idx, sep = "-"),
+        asset_bar = report_asset_bar(
+          "Downloads",
+          report_download_link(
+            "Download TSV",
+            paste0("smoke-", pair_idx, "-", ct_idx, "-", plot_idx, ".tsv"),
+            report_text_data_uri("metric\tvalue\nsignal\t1\n")
+          )
+        ),
+        note = "Innermost loop item",
+        report_item_plot(plot_obj, width = 4, height = 3)
+      )
+    }
+
+    cell_items[[ct_idx]] <- report_item_panel(
+      title = ct,
+      id = paste("cell", pair_idx, ct_idx, sep = "-"),
+      note = "Second-level loop item",
+      report_loop_section(
+        plot_items,
+        open_first = FALSE,
+        max_open = 999L,
+        level = 3L
+      )
+    )
+  }
+
+  cat(as.character(report_loop_section(
+    cell_items,
+    open_first = FALSE,
+    max_open = 999L,
+    level = 2L
+  )))
+  cat("\n")
+}
+```

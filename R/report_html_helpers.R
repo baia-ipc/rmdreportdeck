@@ -552,6 +552,10 @@ render_reportdeck_item_content_html <- function(content, prefix = NULL) {
     return(content)
   }
 
+  if (inherits(content, "knit_asis")) {
+    return(htmltools::HTML(paste(as.character(content), collapse = "\n")))
+  }
+
   if (is.character(content)) {
     text <- paste(content, collapse = "\n")
     return(htmltools::tags$p(text))
@@ -583,6 +587,10 @@ render_reportdeck_item_content_markdown <- function(content) {
 
   if (is.character(content)) {
     return(paste(content, collapse = "\n"))
+  }
+
+  if (inherits(content, "knit_asis")) {
+    return(paste(as.character(content), collapse = "\n"))
   }
 
   ""
@@ -635,7 +643,7 @@ report_item_panel <- function(title, ..., id = NULL, open = FALSE, asset_bar = N
   )
 }
 
-render_reportdeck_item_panel_html <- function(panel, panel_id, open = FALSE) {
+render_reportdeck_item_panel_html <- function(panel, panel_id, open = FALSE, level = 1L) {
   body_children <- list()
   if (!is.null(panel$asset_bar)) {
     body_children <- c(body_children, list(panel$asset_bar))
@@ -650,9 +658,11 @@ render_reportdeck_item_panel_html <- function(panel, panel_id, open = FALSE) {
     body_children <- c(body_children, rendered)
   }
 
+  panel_level <- max(1L, as.integer(level[[1]]))
   htmltools::tags$details(
-    class = "report-item-panel",
+    class = paste("report-item-panel", paste0("report-item-panel-level-", panel_level)),
     id = panel_id,
+    `data-level` = as.character(panel_level),
     open = if (isTRUE(open)) NA else NULL,
     htmltools::tags$summary(
       htmltools::tags$span(panel$title, class = "report-item-panel-title")
@@ -664,8 +674,9 @@ render_reportdeck_item_panel_html <- function(panel, panel_id, open = FALSE) {
   )
 }
 
-render_reportdeck_item_panel_markdown <- function(panel) {
-  parts <- c(paste0("### ", panel$title), "")
+render_reportdeck_item_panel_markdown <- function(panel, level = 1L) {
+  heading_level <- max(3L, min(6L, as.integer(level[[1]]) + 2L))
+  parts <- c(paste0(strrep("#", heading_level), " ", panel$title), "")
   if (!is.null(panel$note) && nzchar(panel$note)) {
     parts <- c(parts, panel$note, "")
   }
@@ -681,7 +692,7 @@ render_reportdeck_item_panel_markdown <- function(panel) {
   paste(parts, collapse = "\n")
 }
 
-report_loop_section <- function(items, open_first = TRUE, max_open = 1L) {
+report_loop_section <- function(items, open_first = TRUE, max_open = 1L, level = 1L) {
   reportdeck_require_knitr()
 
   if (!is.list(items)) {
@@ -692,6 +703,10 @@ report_loop_section <- function(items, open_first = TRUE, max_open = 1L) {
   }
   if (!all(vapply(items, inherits, logical(1), "reportdeck_item_panel"))) {
     stop("All 'items' must be produced by report_item_panel().", call. = FALSE)
+  }
+  level <- as.integer(level[[1]])
+  if (is.na(level) || level < 1L) {
+    stop("'level' must be a positive integer.", call. = FALSE)
   }
 
   base_ids <- vapply(items, function(item) {
@@ -712,7 +727,7 @@ report_loop_section <- function(items, open_first = TRUE, max_open = 1L) {
   if (knitr::is_html_output()) {
     rendered <- Map(
       function(item, panel_id, open_flag) {
-        render_reportdeck_item_panel_html(item, panel_id = panel_id, open = open_flag)
+        render_reportdeck_item_panel_html(item, panel_id = panel_id, open = open_flag, level = level)
       },
       items,
       panel_ids,
@@ -720,7 +735,8 @@ report_loop_section <- function(items, open_first = TRUE, max_open = 1L) {
     )
 
     html <- htmltools::tags$div(
-      class = "report-loop-section",
+      class = paste("report-loop-section", paste0("report-loop-section-level-", level)),
+      `data-level` = as.character(level),
       `data-open-first` = tolower(as.character(isTRUE(open_first))),
       `data-max-open` = as.character(max_open),
       htmltools::tagList(rendered)
@@ -729,7 +745,7 @@ report_loop_section <- function(items, open_first = TRUE, max_open = 1L) {
   }
 
   markdown <- paste(
-    vapply(items, render_reportdeck_item_panel_markdown, character(1)),
+    vapply(items, render_reportdeck_item_panel_markdown, character(1), level = level),
     collapse = "\n\n"
   )
   knitr::asis_output(markdown)
