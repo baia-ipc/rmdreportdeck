@@ -967,7 +967,7 @@ test_that("reportdeck_setup sets cache options based on output.file", {
   expect_type(knitr::opts_hooks$get("cache"), "closure")
 })
 
-test_that("reportdeck_setup disables caching for input-loading chunks", {
+test_that("reportdeck_setup disables caching for input and helper chunks", {
   testthat::skip_if_not_installed("knitr")
 
   tmp_dir <- tempfile("rmdreportdeck-cache-hook-")
@@ -987,6 +987,132 @@ test_that("reportdeck_setup disables caching for input-loading chunks", {
   hook <- knitr::opts_hooks$get("cache")
   expect_false(hook(list(label = "load_input_data", cache = TRUE))$cache)
   expect_false(hook(list(label = "load-data", cache = TRUE))$cache)
+  expect_false(hook(list(label = "metadata", cache = TRUE))$cache)
+  expect_false(hook(list(label = "strsanitize", cache = TRUE))$cache)
+  expect_false(hook(list(label = "helpers_init", cache = TRUE))$cache)
   expect_true(hook(list(label = "results", cache = TRUE))$cache)
   expect_true(hook(list(label = "load_input_data", cache = FALSE))$cache == FALSE)
+})
+
+# --- Unit tests for size-aware caching (Option A) ---
+
+# Access .reportdeck_env from the package namespace without :::
+# (which doesn't work with devtools::load_all())
+reportdeck_env <- function() get(".reportdeck_env", envir = environment(reportdeck_setup))
+
+setup_reportdeck_for_size_tests <- function(tmp_dir, cache_size_limit = 1000) {
+  fake_output <- file.path(tmp_dir, "report.linked.html")
+  knitr::opts_knit$set(output.file = fake_output)
+  reportdeck_setup(cache_size_limit = cache_size_limit)
+}
+
+test_that("reportdeck_setup registers the size-check knit hook", {
+  testthat::skip_if_not_installed("knitr")
+
+  tmp_dir <- tempfile("rmdreportdeck-size-hook-")
+  dir.create(tmp_dir, recursive = TRUE)
+  old_output <- knitr::opts_knit$get("output.file")
+  on.exit(knitr::opts_knit$set(output.file = old_output), add = TRUE)
+
+  setup_reportdeck_for_size_tests(tmp_dir)
+
+  expect_type(knitr::knit_hooks$get("reportdeck_size_check"), "closure")
+  expect_true(isTRUE(knitr::opts_chunk$get("reportdeck_size_check")))
+})
+
+test_that("size-check hook snapshots vars before chunk and detects large new objects after", {
+  testthat::skip_if_not_installed("knitr")
+
+  tmp_dir <- tempfile("rmdreportdeck-size-detect-")
+  dir.create(tmp_dir, recursive = TRUE)
+  old_output <- knitr::opts_knit$get("output.file")
+  on.exit(knitr::opts_knit$set(output.file = old_output), add = TRUE)
+
+  # Use a tiny limit so a plain integer vector triggers it
+  setup_reportdeck_for_size_tests(tmp_dir, cache_size_limit = 1000)
+
+  hook <- knitr::knit_hooks$get("reportdeck_size_check")
+  options <- list(label = "analysis", cache = TRUE, reportdeck_size_check = TRUE)
+
+  env <- knitr::knit_global()
+
+  # Simulate before: snapshot empty env
+  hook(before = TRUE, options = options)
+  expect_identical(reportdeck_env()$pre_chunk_vars, ls(envir = env))
+
+  # Simulate chunk creating a large object in the knit env
+  assign("big_obj", raw(5000), envir = env)
+  on.exit(rm("big_obj", envir = env), add = TRUE)
+
+  # Simulate after: should detect big_obj and add label to registry
+  hook(before = FALSE, options = options)
+
+  expect_true("analysis" %in% reportdeck_env()$large_chunk_labels)
+  expect_true(file.exists(reportdeck_env()$registry_path))
+})
+
+test_that("size-check hook does not flag chunks with only small new objects", {
+  testthat::skip_if_not_installed("knitr")
+
+  tmp_dir <- tempfile("rmdreportdeck-size-small-")
+  dir.create(tmp_dir, recursive = TRUE)
+  old_output <- knitr::opts_knit$get("output.file")
+  on.exit(knitr::opts_knit$set(output.file = old_output), add = TRUE)
+
+  setup_reportdeck_for_size_tests(tmp_dir, cache_size_limit = 1000)
+
+  hook <- knitr::knit_hooks$get("reportdeck_size_check")
+  options <- list(label = "small_result", cache = TRUE, reportdeck_size_check = TRUE)
+
+  env <- knitr::knit_global()
+  hook(before = TRUE, options = options)
+
+  assign("tiny_obj", 1L, envir = env)
+  on.exit(rm("tiny_obj", envir = env), add = TRUE)
+
+  hook(before = FALSE, options = options)
+
+  expect_false("small_result" %in% reportdeck_env()$large_chunk_labels)
+})
+
+test_that("cache hook disables cache for labels in the large-chunk registry", {
+  testthat::skip_if_not_installed("knitr")
+
+  tmp_dir <- tempfile("rmdreportdeck-registry-hook-")
+  dir.create(tmp_dir, recursive = TRUE)
+  old_output <- knitr::opts_knit$get("output.file")
+  on.exit(knitr::opts_knit$set(output.file = old_output), add = TRUE)
+
+  setup_reportdeck_for_size_tests(tmp_dir)
+
+  # Manually inject a label into the registry
+  env <- reportdeck_env()
+  env$large_chunk_labels <- c("my_chunk")
+
+  hook <- knitr::opts_hooks$get("cache")
+  expect_false(hook(list(label = "my_chunk", cache = TRUE))$cache)
+  expect_true(hook(list(label = "other_chunk", cache = TRUE))$cache)
+})
+
+test_that("reportdeck_setup loads existing registry from disk", {
+  testthat::skip_if_not_installed("knitr")
+
+  tmp_dir <- tempfile("rmdreportdeck-registry-load-")
+  dir.create(tmp_dir, recursive = TRUE)
+  old_output <- knitr::opts_knit$get("output.file")
+  on.exit(knitr::opts_knit$set(output.file = old_output), add = TRUE)
+
+  # Pre-populate the registry file where reportdeck_setup will look for it
+  cache_path <- file.path(tmp_dir, ".knitr-cache", "report", "")
+  dir.create(cache_path, recursive = TRUE)
+  registry_path <- paste0(cache_path, ".reportdeck_large_chunks.rds")
+  saveRDS(c("previously_large_chunk"), registry_path)
+
+  setup_reportdeck_for_size_tests(tmp_dir)
+
+  expect_true("previously_large_chunk" %in% reportdeck_env()$large_chunk_labels)
+
+  # And the cache hook should disable cache for it
+  hook <- knitr::opts_hooks$get("cache")
+  expect_false(hook(list(label = "previously_large_chunk", cache = TRUE))$cache)
 })

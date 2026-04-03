@@ -443,7 +443,10 @@ report_bundle_asset_bar <- function(
   )
 }
 
-reportdeck_setup <- function(extra_cache_deps = list()) {
+# Package-level environment for state shared between hooks during a knit session.
+.reportdeck_env <- new.env(parent = emptyenv())
+
+reportdeck_setup <- function(extra_cache_deps = list(), cache_size_limit = 500 * 1024^2) {
   reportdeck_require_knitr()
   output_file <- knitr::opts_knit$get("output.file")
   if (is.null(output_file)) {
@@ -452,12 +455,28 @@ reportdeck_setup <- function(extra_cache_deps = list()) {
   output_dir <- dirname(output_file)
   report_stem <- tools::file_path_sans_ext(tools::file_path_sans_ext(basename(output_file)))
   cache_path <- file.path(output_dir, ".knitr-cache", report_stem, "")
+
+  # Store session state for use in hooks
+  .reportdeck_env$cache_path <- cache_path
+  .reportdeck_env$cache_size_limit <- cache_size_limit
+  .reportdeck_env$registry_path <- paste0(cache_path, ".reportdeck_large_chunks.rds")
+  .reportdeck_env$pre_chunk_vars <- character(0)
+
+  # Load persistent large-chunk registry from previous renders
+  if (file.exists(.reportdeck_env$registry_path)) {
+    .reportdeck_env$large_chunk_labels <- readRDS(.reportdeck_env$registry_path)
+  } else {
+    .reportdeck_env$large_chunk_labels <- character(0)
+  }
+
   knitr::opts_chunk$set(
     cache = TRUE,
     cache.path = cache_path,
-    cache.extra = c(list(knitr::current_input()), extra_cache_deps)
+    cache.extra = c(list(knitr::current_input()), extra_cache_deps),
+    reportdeck_size_check = TRUE
   )
   knitr::opts_hooks$set(cache = reportdeck_chunk_cache_hook)
+  knitr::knit_hooks$set(reportdeck_size_check = reportdeck_size_check_hook)
   invisible(cache_path)
 }
 
@@ -471,18 +490,69 @@ reportdeck_require_knitr <- function() {
   }
 }
 
-reportdeck_is_input_chunk_label <- function(label) {
+reportdeck_is_uncached_chunk_label <- function(label) {
   if (is.null(label) || !length(label) || !nzchar(label[[1]])) {
     return(FALSE)
   }
-  grepl("^load($|[_-])", label[[1]], perl = TRUE)
+  grepl("^(setup|load($|[_-])|meta(data)?$|strsanitize$|sanitize($|[_-])|helper(s)?($|[_-]))",
+        label[[1]], perl = TRUE)
 }
 
 reportdeck_chunk_cache_hook <- function(options) {
-  if (isTRUE(options$cache) && reportdeck_is_input_chunk_label(options$label)) {
-    options$cache <- FALSE
+  if (isTRUE(options$cache)) {
+    if (reportdeck_is_uncached_chunk_label(options$label)) {
+      options$cache <- FALSE
+    } else if (options$label %in% .reportdeck_env$large_chunk_labels) {
+      options$cache <- FALSE
+    }
   }
   options
+}
+
+# Knit hook that runs before/after each chunk to detect newly created large objects.
+# When large objects are found, the chunk is added to a persistent registry so that
+# on subsequent renders the cache hook can disable caching for it before knitr
+# attempts to serialize the objects.
+reportdeck_size_check_hook <- function(before, options) {
+  if (before) {
+    .reportdeck_env$pre_chunk_vars <- ls(envir = knitr::knit_global())
+    return(NULL)
+  }
+
+  label <- options$label
+
+  # Skip chunks already handled by the label convention or registry
+  if (reportdeck_is_uncached_chunk_label(label)) return(NULL)
+  if (label %in% .reportdeck_env$large_chunk_labels) return(NULL)
+
+  limit <- .reportdeck_env$cache_size_limit
+  new_vars <- setdiff(ls(envir = knitr::knit_global()), .reportdeck_env$pre_chunk_vars)
+
+  if (length(new_vars) == 0L) return(NULL)
+
+  env <- knitr::knit_global()
+  has_large <- any(vapply(new_vars, function(v) {
+    tryCatch(
+      as.numeric(object.size(get(v, envir = env, inherits = FALSE))) > limit,
+      error = function(e) FALSE
+    )
+  }, logical(1)))
+
+  if (has_large) {
+    updated <- unique(c(.reportdeck_env$large_chunk_labels, label))
+    .reportdeck_env$large_chunk_labels <- updated
+    dir.create(.reportdeck_env$cache_path, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(updated, .reportdeck_env$registry_path)
+    # Remove any cache files already written for this chunk in the current render
+    cache_files <- list.files(
+      .reportdeck_env$cache_path,
+      pattern = paste0("^", label, "[._]"),
+      full.names = TRUE
+    )
+    if (length(cache_files) > 0L) unlink(cache_files)
+  }
+
+  NULL
 }
 
 reportdeck_slugify <- function(text) {
