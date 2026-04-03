@@ -535,7 +535,7 @@ test_that("linked renderer creates .linked.html with file-backed assets and no d
 
   runinfo_text <- paste(readLines(runinfo_file, warn = FALSE), collapse = "\n")
   expect_match(runinfo_text, "rmdreportdeck::render_html_report_linked")
-  expect_match(runinfo_text, "Output of timing:")
+  expect_match(runinfo_text, "Pack timing:")
 })
 
 test_that("data_uri helper code externalizes downloads in linked mode", {
