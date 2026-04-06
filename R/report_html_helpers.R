@@ -473,6 +473,7 @@ reportdeck_setup <- function(extra_cache_deps = list(), cache_size_limit = 500 *
     cache = TRUE,
     cache.path = cache_path,
     cache.extra = c(list(knitr::current_input()), extra_cache_deps),
+    cache.lazy = FALSE,
     reportdeck_size_check = TRUE
   )
   knitr::opts_hooks$set(cache = reportdeck_chunk_cache_hook)
@@ -531,12 +532,13 @@ reportdeck_size_check_hook <- function(before, options) {
   if (length(new_vars) == 0L) return(NULL)
 
   env <- knitr::knit_global()
-  has_large <- any(vapply(new_vars, function(v) {
+  sizes <- vapply(new_vars, function(v) {
     tryCatch(
-      as.numeric(object.size(get(v, envir = env, inherits = FALSE))) > limit,
-      error = function(e) FALSE
+      as.numeric(object.size(get(v, envir = env, inherits = FALSE))),
+      error = function(e) 0
     )
-  }, logical(1)))
+  }, numeric(1))
+  has_large <- any(sizes > limit) || sum(sizes) > limit
 
   if (has_large) {
     updated <- unique(c(.reportdeck_env$large_chunk_labels, label))
