@@ -63,12 +63,17 @@ do not need custom download assembly logic.
 ---
 title: "P01 | Example Report"
 output: html_document
+params:
+  prjpath: !expr paste0(normalizePath(getwd()), "/")
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+
 library(ggplot2)
 library(knitr)
 library(rmdreportdeck)
+reportdeck_setup()
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
@@ -81,21 +86,33 @@ Describe the purpose of the report here.
 
 ## Figure
 
-```{r}
-print(report_bundle_asset_bar(
-  "Downloads",
-  bundle,
-  tsv_label = "TSV"
-))
+```{r fig_assets, results='asis', echo=FALSE}
+cat(as.character(report_bundle_asset_bar("Downloads", bundle, tsv_label = "TSV")))
+```
+
+```{r fig}
 print(plot_obj)
 ```
 
 ## Table
 
-```{r}
+```{r table}
 knitr::kable(df)
 ```
 ````
+
+Two conventions to follow in every HTML report:
+
+- **`reportdeck_setup()`**: call it immediately after `library(rmdreportdeck)` in the
+  setup chunk. It configures knitr caching with provenance tracking and
+  registers size-aware hooks. Without it, caching is not coordinated with the
+  report shell.
+
+- **`results='asis'` + `cat(as.character(...))`**: asset bars and other HTML
+  widgets must be emitted in chunks with `results='asis'`. Use
+  `cat(as.character(...))` rather than `print()`. Keeping the asset bar in its
+  own chunk (separate from the plot chunk) makes caching and chunk reuse
+  cleaner.
 
 # Loop-generated outputs
 
@@ -104,7 +121,7 @@ For repeated outputs such as one figure per sample or pathway, use one H2 subsec
 ````markdown
 ## Per-sample QC
 
-```{r results='asis'}
+```{r per_sample_qc, results='asis', echo=FALSE}
 items <- vector("list", nrow(samples))
 
 for (i in seq_len(nrow(samples))) {
@@ -132,9 +149,13 @@ for (i in seq_len(nrow(samples))) {
   )
 }
 
-report_loop_section(items)
+cat(as.character(report_loop_section(items)))
 ```
 ````
+
+The loop chunk must have `results='asis'` so the HTML panels are injected
+directly into the document. `cat(as.character(...))` is the correct emission
+idiom — `print()` will not work for HTML tag objects.
 
 # Bundles and low-level helpers
 
@@ -218,14 +239,52 @@ render_html_report_with_runinfo("report.Rmd")
 render_pdf_report_with_runinfo("report.Rmd")
 ```
 
-From the CLI wrappers:
+From a project-level wrapper script:
 
 ```bash
-knit2html report.Rmd param=value
-knit2pdf report.Rmd param=value
+scripts/knit2html report.Rmd param=value
 ```
 
 Both renderers write a `.runinfo` sidecar next to the rendered report.
+
+## Project-level `knit2html` wrapper
+
+Projects using `renv` need a thin wrapper at `scripts/knit2html` in the
+project root. The wrapper must:
+
+1. Resolve the Rmd path to absolute before changing directory.
+2. `cd` to the project root so `renv` activates via `.Rprofile`.
+3. Set `R_PROFILE_USER` explicitly so the right profile is sourced even when
+   R is invoked non-interactively.
+4. Call `rmdreportdeck::knit2html_cli()` to do the actual rendering.
+
+Minimal template:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Usage: knit2html <Rmdfile> [param=value ...]" > /dev/stderr; exit 1
+elif [ ! -e "$1" ]; then
+  echo "File does not exist: $1" > /dev/stderr; exit 1
+fi
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+RMD_FILE="$1"; shift
+
+if [[ "$RMD_FILE" != /* ]]; then RMD_FILE="$PWD/$RMD_FILE"; fi
+
+cd "$PROJECT_ROOT"
+export R_PROFILE_USER="$PROJECT_ROOT/.Rprofile"
+
+Rscript -e 'rmdreportdeck::knit2html_cli(commandArgs(trailingOnly = TRUE))' \
+  "$RMD_FILE" "$@"
+```
+
+Projects may extend this to source environment config files or to support
+loading `rmdreportdeck` from source via a `REPORTDECK_DEV_PATH` variable.
 
 # Examples
 

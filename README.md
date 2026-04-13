@@ -81,14 +81,19 @@ The package does not replace standard R Markdown authoring. It adds a rendering
 layer and helper functions around it.
 
 Conventions:
+
+- in the setup chunk, call `reportdeck_setup()` immediately after
+  `library(rmdreportdeck)` — it configures knitr caching with provenance
+  tracking and registers size-aware hooks
 - use `#` headings for major sections
 - use `##` headings for subsections
 - add a `# Goal`, `# Description`, `# Methods`, `# Workflow`, or `# Pipeline`
   section near the top when the purpose or structure of the report should open
   immediately
 - render figures and tables inline in standard chunks
-- for important HTML figures/tables, add a `report_asset_bar()` so users can
-  download the figure and the source data directly from the page
+- for important HTML figures/tables, emit download controls in a dedicated
+  chunk with `results='asis'` and `cat(as.character(report_asset_bar(...)))` —
+  keep the plot in its own separate chunk
 - when a plot and its source table travel together, prefer
   `report_plot_bundle()`, `report_bundle_asset_bar()`, and
   `report_tsv_download_link()` instead of rebuilding the same three links by
@@ -101,26 +106,48 @@ Conventions:
 
 ## Minimal example
 
-```r
+A complete minimal `.Rmd` for HTML rendering:
+
+````markdown
+---
+title: "Example Report"
+output: html_document
+params:
+  prjpath: !expr paste0(normalizePath(getwd()), "/")
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+
 library(ggplot2)
 library(rmdreportdeck)
+reportdeck_setup()
 
 df <- data.frame(group = c("A", "B"), value = c(2, 5))
 plot_obj <- ggplot(df, aes(group, value, fill = group)) + geom_col()
-block_prefix <- "V01.01"
-bundle <- report_plot_bundle(
-  plot_obj,
-  block_prefix = block_prefix,
-  suffix = "plot",
-  data = df
-)
-
-report_bundle_asset_bar(
-  "Downloads",
-  bundle,
-  tsv_label = "TSV"
-)
+bundle <- report_plot_bundle(plot_obj, block_prefix = "V01.01", suffix = "plot", data = df)
 ```
+
+# Goal
+
+Describe the purpose of the report here.
+
+## Figure
+
+```{r fig_assets, results='asis', echo=FALSE}
+cat(as.character(report_bundle_asset_bar("Downloads", bundle, tsv_label = "TSV")))
+```
+
+```{r fig}
+print(plot_obj)
+```
+````
+
+Key points:
+
+- call `reportdeck_setup()` right after `library(rmdreportdeck)` in the setup chunk — this enables caching with provenance tracking
+- emit asset bars in a dedicated chunk with `results='asis'` and `cat(as.character(...))`
+- keep `print(plot_obj)` in a separate chunk so the figure renders independently of its download controls
 
 `report_plot_bundle()` is the non-overlapping high-level helper added on top of
 the existing low-level primitives:
@@ -228,14 +255,64 @@ render_html_report_with_runinfo("report.Rmd")
 render_pdf_report_with_runinfo("report.Rmd")
 ```
 
-From the CLI wrappers:
+From a project-level CLI wrapper (see below):
 
 ```bash
-knit2html report.Rmd param=value
-knit2pdf report.Rmd param=value
+scripts/knit2html report.Rmd param=value
 ```
 
 Both rendering paths create a `.runinfo` file next to the rendered report.
+
+## Project-level `knit2html` wrapper
+
+The package ships a generic `knit2html` CLI entry point, but projects that use
+`renv` need a thin project-level wrapper script so that the correct library
+path is active before the Rmd is knitted. Place the wrapper at
+`scripts/knit2html` in the project root and make it executable.
+
+A minimal template:
+
+```bash
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Usage: knit2html <Rmdfile> [param1=value1] ..." > /dev/stderr
+  exit 1
+elif [ ! -e "$1" ]; then
+  echo "File does not exist: $1" > /dev/stderr
+  exit 1
+fi
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+RMD_FILE="$1"
+shift
+
+# Resolve to absolute path before cd
+if [[ "$RMD_FILE" != /* ]]; then
+  RMD_FILE="$PWD/$RMD_FILE"
+fi
+
+# Run from project root so renv and .Rprofile are found
+cd "$PROJECT_ROOT"
+export R_PROFILE_USER="$PROJECT_ROOT/.Rprofile"
+
+Rscript -e 'rmdreportdeck::knit2html_cli(commandArgs(trailingOnly = TRUE))' \
+  "$RMD_FILE" "$@"
+```
+
+Projects may extend this wrapper to source additional environment files
+(e.g. `config/render_env.sh`) or to support loading `rmdreportdeck` from
+source via a `REPORTDECK_DEV_PATH` environment variable.
+
+Why `cd "$PROJECT_ROOT"` matters: `renv` activates via `.Rprofile` in the
+working directory. Without changing to the project root first,
+`R_PROFILE_USER` may point to the right file but path-relative calls inside
+the Rmd will resolve against whatever directory the user was in when they
+called the wrapper. Running from the project root ensures that `here::here()`
+and relative paths inside the Rmd all resolve consistently.
 
 ## Documentation and examples
 
