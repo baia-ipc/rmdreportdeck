@@ -841,3 +841,53 @@ report_loop_section <- function(items, open_first = TRUE, max_open = 1L, level =
   )
   knitr::asis_output(markdown)
 }
+
+# ---------------------------------------------------------------------------
+# Rmd authoring utilities
+# ---------------------------------------------------------------------------
+
+#' Emit a markdown section heading
+#'
+#' Writes a blank line, a heading of the requested level, and another blank
+#' line to the output document. Call inside a \code{results="asis"} chunk.
+#'
+#' @param level Integer heading level (1 = \code{#}, 2 = \code{##}, etc.).
+#' @param text Heading text.
+#'
+#' @return Called for its side-effect. Returns \code{invisible(NULL)}.
+#' @export
+h <- function(level, text) {
+  writeLines(c("", paste0(strrep("#", level), " ", text), ""))
+  invisible(NULL)
+}
+
+#' Write a data frame to a tab-separated file
+#'
+#' Creates parent directories if necessary, then writes \code{x} as a
+#' tab-separated file without quoting or row names.
+#'
+#' @param x A data frame.
+#' @param path Output file path.
+#'
+#' @return \code{path}, invisibly.
+#' @export
+write_tsv <- function(x, path) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  utils::write.table(x, file = path, sep = "\t", quote = FALSE,
+                     row.names = FALSE, na = "")
+  invisible(path)
+}
+
+#' Sanitize a string for use as an asset file suffix
+#'
+#' Replaces runs of characters outside \code{[A-Za-z0-9_.-]} with a single
+#' underscore. Suitable for constructing asset filenames that are safe across
+#' all file systems.
+#'
+#' @param x A character string.
+#'
+#' @return A sanitized character string.
+#' @export
+safe_asset_suffix <- function(x) {
+  gsub("[^A-Za-z0-9_.\\-]+", "_", x)
+}

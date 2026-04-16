@@ -1,7 +1,7 @@
 Package: rmdreportdeck
 Type: Package
 Title: Reusable Renderers and Shell Assets for R Markdown Reports
-Version: 0.2.0
+Version: 0.2.1
 Authors@R: person(given = "Giorgio", family = "Gonnella", role = c("aut", "cre"), email = "ggonnella@pasteur-kh.org")
 Description: Provides reusable HTML and PDF rendering helpers for R Markdown
     reports, including an interactive HTML shell, embedded download helpers,
